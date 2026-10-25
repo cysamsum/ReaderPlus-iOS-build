@@ -21,5 +21,5 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 This license applies to original ReaderPlus code only. Third-party-derived
-files retain their original licenses. In particular Sources/EdgeTTS/EdgeGEC.swift
-and scripts/gec_reference.py are LGPLv3; see ThirdParty and docs/UPSTREAM.md.
+files retain their original licenses. In particular CompatApp/RPGEC.c is LGPLv3; see ThirdParty and README.md.
+SocketRocket retains its BSD license and patent notice.
