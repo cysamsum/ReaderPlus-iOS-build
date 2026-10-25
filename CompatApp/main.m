@@ -72,6 +72,7 @@ static NSArray *defaultVoices(void){return @[
  NSUserDefaults *d=[NSUserDefaults standardUserDefaults];UITableViewCell *c=[[UITableViewCell alloc]initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:nil];c.accessoryType=UITableViewCellAccessoryDisclosureIndicator;
  if(p.section==0){c.textLabel.text=p.row?@"主题":@"字号";c.detailTextLabel.text=p.row?([d stringForKey:@"reading.theme"]?:@"护眼纸色"):[NSString stringWithFormat:@"%ld",(long)([d integerForKey:@"reading.fontSize"]?:21)];}
  if(p.section==1){c.textLabel.text=@[@"朗读方式",@"语言与音色",@"语速",@"更新微软音色列表"][p.row];c.detailTextLabel.text=p.row==0?RPCurrentMode():p.row==1?([d stringForKey:@"speech.voice"]?:@"晓晓"):p.row==2?[NSString stringWithFormat:@"%+ld%%",(long)[d integerForKey:@"speech.rate"]]:@"";}
+ if(p.section==1&&p.row==1&&[RPCurrentMode()isEqual:@"系统语音（离线）"]){NSString *identifier=[d stringForKey:@"compat.systemVoice"];AVSpeechSynthesisVoice *voice=identifier.length?[AVSpeechSynthesisVoice voiceWithIdentifier:identifier]:nil;c.detailTextLabel.text=voice?[NSString stringWithFormat:@"%@ · %@",voice.name,voice.language]:@"按语言自动选择";}
  if(p.section==2){c.textLabel.text=@"允许发送朗读段落";UISwitch *s=[UISwitch new];s.on=[d boolForKey:@"speech.consent"];[s addTarget:self action:@selector(consent:) forControlEvents:UIControlEventValueChanged];c.accessoryView=s;}
  if(p.section==3){c.textLabel.text=@[@"拾页 Reader+ 1.1.0",@"目标系统 iOS 9–26.1",@"开源许可"][p.row];if(p.row<2)c.accessoryType=UITableViewCellAccessoryNone;}
  return c;
