@@ -4,7 +4,7 @@
 #import <UIKit/UIKit.h>
 @interface RPAudioAudit()
 @property(nonatomic,strong)RPSpeech *speech;
-@property(nonatomic,strong)RPConnection *connection;
+@property(nonatomic,strong)ReaderPlusSpeechConnection *connection;
 @property(nonatomic,strong)NSTimer *timer;
 @property(nonatomic,strong)NSDate *deadline;
 @property(nonatomic,strong)NSMutableDictionary *report;
@@ -30,7 +30,7 @@
  if(self.failure){[self save:NO message:self.failure];return;}
  if(self.deadline.timeIntervalSinceNow<=0){[self save:NO message:[@"Timed out in phase " stringByAppendingString:self.phase]];return;}
  if(self.speech.active)return;
- if([self.phase isEqual:@"system"]){self.report[@"systemSpeechCompleted"]=@YES;self.phase=@"synthesizing";self.deadline=[NSDate dateWithTimeIntervalSinceNow:45];self.connection=[RPConnection new];__weak typeof(self) weak=self;
+ if([self.phase isEqual:@"system"]){self.report[@"systemSpeechCompleted"]=@YES;self.phase=@"synthesizing";self.deadline=[NSDate dateWithTimeIntervalSinceNow:45];self.connection=[ReaderPlusSpeechConnection new];__weak typeof(self) weak=self;
   [self.connection synthesize:@"你好，这是离线播放验证。" voice:@"zh-CN-XiaoxiaoNeural" locale:@"zh-CN" rate:0 completion:^(NSData *audio,NSError *error){RPAudioAudit *s=weak;if(!s)return;if(error){[s save:NO message:error.localizedDescription];return;}NSError *writeError=nil;if(!RPStoreAudio(audio,@"你好，这是离线播放验证。",@"zh-CN-XiaoxiaoNeural",0,&writeError)){[s save:NO message:writeError.localizedDescription];return;}NSUserDefaults *d=[NSUserDefaults standardUserDefaults];[d setObject:@"仅播放离线音频" forKey:@"compat.mode"];[d setObject:@"zh-CN-XiaoxiaoNeural" forKey:@"speech.voice"];[d setBool:NO forKey:@"speech.consent"];s.requestsBeforeOffline=RPNetworkSynthesisCount();s.phase=@"cached";s.report[@"downloadedAudioBytes"]=@(audio.length);s.deadline=[NSDate dateWithTimeIntervalSinceNow:20];[s.speech start:[s document:@"你好，这是离线播放验证。"]section:0 paragraph:0];}];return;
  }
  if([self.phase isEqual:@"cached"]){self.report[@"cachedSpeechCompleted"]=@YES;NSUInteger requests=RPNetworkSynthesisCount()-self.requestsBeforeOffline;self.report[@"networkRequestsDuringOfflinePlayback"]=@(requests);[self save:requests==0 message:@"System synthesis and downloaded MP3 playback both completed; offline playback made no synthesis requests."];}

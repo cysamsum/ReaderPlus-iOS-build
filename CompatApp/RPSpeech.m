@@ -12,7 +12,7 @@ NSString *RPXMLEscape(NSString *text){
  for(NSArray *p in @[@[@"&",@"&amp;"],@[@"<",@"&lt;"],@[@">",@"&gt;"],@[@"\"",@"&quot;"],@[@"'",@"&apos;"]])[s replaceOccurrencesOfString:p[0] withString:p[1] options:0 range:NSMakeRange(0,s.length)];return s;
 }
 static NSError *RPSpeechError(NSString *s){return [NSError errorWithDomain:@"ReaderPlusSpeech" code:1 userInfo:@{NSLocalizedDescriptionKey:s}];}
-@interface RPConnection()<SRWebSocketDelegate>
+@interface ReaderPlusSpeechConnection()<SRWebSocketDelegate>
 @property(nonatomic,strong)SRWebSocket *socket;
 @property(nonatomic,strong)NSTimer *timer;
 @property(nonatomic,strong)NSMutableData *audio;
@@ -20,7 +20,7 @@ static NSError *RPSpeechError(NSString *s){return [NSError errorWithDomain:@"Rea
 @property(nonatomic)NSInteger rate;
 @property(nonatomic,copy)void(^completion)(NSData*,NSError*);
 @end
-@implementation RPConnection
+@implementation ReaderPlusSpeechConnection
 -(void)synthesize:(NSString*)text voice:(NSString*)voice locale:(NSString*)locale rate:(NSInteger)rate completion:(void(^)(NSData*,NSError*))completion{
  requestCount++;
  [self cancel];self.completion=completion;self.text=text;self.voice=voice;self.locale=locale;self.rate=MAX(-50,MIN(100,rate));self.audio=[NSMutableData data];
@@ -61,7 +61,7 @@ static NSError *RPSpeechError(NSString *s){return [NSError errorWithDomain:@"Rea
 @end
 #if TARGET_OS_IPHONE
 @interface RPSpeech()
-@property(nonatomic,strong)RPConnection *connection;
+@property(nonatomic,strong)ReaderPlusSpeechConnection *connection;
 @property(nonatomic,strong)AVAudioPlayer *player;
 @property(nonatomic,strong)AVSpeechSynthesizer *synth;
 @property(nonatomic,strong)AVSpeechUtterance *utterance;
@@ -94,7 +94,7 @@ static NSError *RPSpeechError(NSString *s){return [NSError errorWithDomain:@"Rea
  NSData *cached=RPCachedAudio(text,voice,rate);if(cached){[self playAudio:cached];return;}
  if([RPCurrentMode() isEqual:@"仅播放离线音频"]){[self fail:RPSpeechError(@"此段尚未下载。请联网后使用“下载全书离线音频”，并保持相同音色和语速。离线音频不支持断网时即时合成新文字。")];return;}
  if(![prefs boolForKey:@"speech.consent"]){[self fail:RPSpeechError(@"此段尚未缓存，请允许在线合成或选择已下载的离线音频。")];return;}
- self.loading=YES;[self notify];self.connection=[RPConnection new];NSUInteger generation=self.generation;__weak typeof(self) weak=self;
+ self.loading=YES;[self notify];self.connection=[ReaderPlusSpeechConnection new];NSUInteger generation=self.generation;__weak typeof(self) weak=self;
  [self.connection synthesize:text voice:voice locale:locale rate:rate completion:^(NSData *audio,NSError *error){RPSpeech *s=weak;if(!s||s.generation!=generation||!s.active)return;if(error){[s fail:error];return;}NSError *saveError=nil;if(!RPStoreAudio(audio,text,voice,rate,&saveError)){[s fail:saveError];return;}[s playAudio:audio];}];
 }
 -(void)playAudio:(NSData*)audio{self.loading=NO;NSError *error=nil;self.player=[[AVAudioPlayer alloc]initWithData:audio error:&error];self.player.delegate=self;if(!self.player||![self.player play]){[self fail:error?:RPSpeechError(@"音频无法播放。")];return;}[self notify];}

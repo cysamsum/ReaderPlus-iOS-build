@@ -18,7 +18,7 @@ BOOL RPStoreAudio(NSData *audio,NSString *text,NSString *voice,NSInteger rate,NS
 @property(nonatomic,copy)NSString *voice,*locale;
 @property(nonatomic)NSInteger rate;
 @property(nonatomic)NSUInteger index,generation;
-@property(nonatomic,strong)RPConnection *connection;
+@property(nonatomic,strong)ReaderPlusSpeechConnection *connection;
 @property(nonatomic,copy)void(^progress)(NSUInteger,NSUInteger);
 @property(nonatomic,copy)void(^completion)(NSError*);
 @end
@@ -33,7 +33,7 @@ BOOL RPStoreAudio(NSData *audio,NSString *text,NSString *voice,NSInteger rate,NS
  while(self.index<self.texts.count&&RPCachedAudio(self.texts[self.index],self.voice,self.rate))self.index++;
  if(self.progress)self.progress(self.index,self.texts.count);
  if(self.index>=self.texts.count){[self finish:nil];return;}
- NSUInteger generation=self.generation;NSString *text=self.texts[self.index];self.connection=[RPConnection new];__weak typeof(self) weak=self;
+ NSUInteger generation=self.generation;NSString *text=self.texts[self.index];self.connection=[ReaderPlusSpeechConnection new];__weak typeof(self) weak=self;
  [self.connection synthesize:text voice:self.voice locale:self.locale rate:self.rate completion:^(NSData *audio,NSError *error){RPDownload *s=weak;if(!s||!s.active||s.generation!=generation)return;NSError *saveError=error;if(!saveError&&!RPStoreAudio(audio,text,s.voice,s.rate,&saveError)){}if(saveError){[s finish:saveError];return;}s.index++;dispatch_async(dispatch_get_main_queue(),^{[s next];});}];
 }
 @end

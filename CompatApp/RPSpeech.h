@@ -2,7 +2,7 @@
 #import <AVFoundation/AVFoundation.h>
 NSString *RPXMLEscape(NSString *text);
 NSUInteger RPNetworkSynthesisCount(void);
-@interface RPConnection:NSObject
+@interface ReaderPlusSpeechConnection:NSObject
 -(void)synthesize:(NSString*)text voice:(NSString*)voice locale:(NSString*)locale rate:(NSInteger)rate completion:(void(^)(NSData*,NSError*))completion;
 -(void)cancel;
 @end
