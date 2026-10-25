@@ -1,0 +1,1 @@
+ReaderPlus iOS 9 compatibility build source. UIKit reader with online Microsoft speech, downloaded offline audio playback and iOS system speech. Windows neural models are not included. See ThirdParty for licenses.

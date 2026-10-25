@@ -1,0 +1,61 @@
+name: Build iOS 9 universal IPA
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'CompatApp/**'
+      - 'ThirdParty/SocketRocket/**'
+      - 'scripts/*compat*'
+      - '.github/workflows/compat.yml'
+permissions:
+  contents: read
+concurrency:
+  group: readerplus-compat-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 35
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.1.1.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare fixed SDK headers and link stubs
+        run: bash scripts/prepare_compat_sdk.sh
+      - name: Compile armv7 and arm64 with iOS 9 headers
+        run: |
+          set -o pipefail
+          python3 scripts/build_compat.py 2>&1 | tee build/compat-device.log
+      - name: Compile identical UIKit sources for Simulator
+        run: |
+          set -o pipefail
+          python3 scripts/build_compat.py --simulator 2>&1 | tee build/compat-simulator.log
+      - name: Compatibility core and live speech test
+        run: bash scripts/compat_tests.sh
+      - name: Launch on iOS 26.1 and capture reader
+        run: bash scripts/compat_simulator.sh
+      - name: Verify universal IPA
+        run: python3 scripts/verify_compat_ipa.py dist/ReaderPlus-1.1.0-iOS9-26.1-unsigned.ipa
+      - name: Package exact source and checksums
+        run: |
+          git archive --format=zip --prefix=ReaderPlus/ --output=dist/ReaderPlus-iOS9-source.zip HEAD
+          shasum -a 256 dist/ReaderPlus-1.1.0-*.ipa dist/ReaderPlus-iOS9-source.zip > dist/COMPAT-SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ReaderPlus-iOS9-universal-IPA
+          path: |
+            dist/ReaderPlus-1.1.0-*.ipa
+            dist/ReaderPlus-iOS9-source.zip
+            dist/COMPAT-SHA256SUMS.txt
+            dist/compat-verification.json
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ReaderPlus-iOS9-diagnostics
+          path: |
+            build/*compat*.log
+            build/compat-*.png
+            build/compat-*.json
+          if-no-files-found: ignore
