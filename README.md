@@ -38,3 +38,9 @@ PDF 在 iOS 9/10 支持原页查看，文字提取需要系统提供 PDFKit（iO
 `CompatApp/RPGEC.c` 从 rany2/edge-tts（固定提交 `bd44c1d1aaebdc1db7f47456ee12431b42ec7cac`）移植，保留 LGPLv3。完整许可在 `ThirdParty/`。修改此模块后可按上述脚本重新构建完整应用，并自行签名安装；对应源码随每份成功构建的 IPA 一起提供。
 
 仓库仅发布用户明确授权的最小构建源码、示例和许可，不包含账号凭据、用户书籍或 Windows 语音包。微软在线接口的协议和可用性可能变化。
+
+## 当前构建结果
+
+[1.1.0 build 4 完整成功构建](https://github.com/gdsamsum/ReaderPlus-iOS-build/actions/runs/40212914396)，精确源码提交 `a5afb14fecd6ac3f24ce0cb2b182e04247dd4537`。iOS 26.1 模拟器的系统朗读和缓存 MP3 播放完成，缓存播放期间新增合成请求为 0。此断言针对应用合成请求计数；没有物理关闭主机网络。旧系统和真机仍需验证。
+
+IPA SHA256：`0cbcb81bacf90344764eb5c4b14331449ea2c87273fb61628c391b94980b8834`。对应精确源码快照随 Actions 主产物提供。
