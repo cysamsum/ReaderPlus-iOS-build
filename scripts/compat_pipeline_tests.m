@@ -1,6 +1,7 @@
 #import <Foundation/Foundation.h>
 #import "RPAudioPipeline.h"
 #import "RPAudioCache.h"
+#import "RPSpeech.h"
 
 @interface ReaderPlusFakeAudioRequest:NSObject<ReaderPlusAudioRequest>
 @property(nonatomic,copy)NSString *text,*voice;
@@ -54,5 +55,28 @@ void ReaderPlusRunPipelineTests(void){
 
  // Repeated paragraphs share an in-flight request and then reuse the saved audio.
  [requests removeAllObjects];NSString *repeat=[unique stringByAppendingString:@"-repeat"];p=pipeline(testDocument(@[repeat,repeat],@[]),@"repeat-test",YES,requests);[p start];NSCAssert(requests.count==1,@"Coalesce duplicate text requests");[(ReaderPlusFakeAudioRequest*)requests[0]finish:audio error:nil];NSCAssert(p.currentSegment.audio&&p.nextSegment.audio&&requests.count==1,@"Repeated text reuses the completed request");[p cancel];
- drain();puts("PASS: ordered lookahead, concurrency bounds, chapter traversal, stale replies, deferred errors, offline isolation and duplicate requests");
+ // Skip non-speech paragraphs without changing source positions or hiding real errors.
+ NSArray *silent=@[@"",@"。",@"！",@"…",@"——",@"，；：？！",@"\"'()[]{}",@" \t\r\n　",@"\u200B\uFEFF",@"𐄀"];
+ for(NSString *text in silent)NSCAssert(!RPHasSpeechContent(text),@"Ignore punctuation and invisible text: %@",text);
+ NSCAssert(!RPHasSpeechContent(nil),@"Ignore missing text");
+ for(NSString *text in @[@"中",@"A",@"1",@"你好。",@"£",@"😀",@"𠀀"])NSCAssert(RPHasSpeechContent(text),@"Retain letters, numbers and symbols: %@",text);
+ NSDictionary *punctuated=testDocument(@[@"。",texts[0],@"…",@"——",texts[1]],@[@"！",texts[2],@"。"]);
+ [requests removeAllObjects];p=pipeline(punctuated,@"pipeline-test-voice",NO,requests);[p start];
+ NSCAssert(p.currentSegment.paragraph==1&&p.nextSegment.paragraph==4&&p.bufferedCount==3&&requests.count==0,@"Skip leading and consecutive punctuation, preserve original positions and fill lookahead");
+ [p advance];[p advance];NSCAssert(p.currentSegment.section==2&&p.currentSegment.paragraph==1&&p.currentSegment.audio,@"Skip punctuation across chapters in offline mode");[p advance];NSCAssert(!p.currentSegment,@"Trailing punctuation ends playback normally");[p cancel];
+ [requests removeAllObjects];NSString *after=[unique stringByAppendingString:@"-after-punctuation"];
+ p=pipeline(testDocument(@[@"。",after,@"！"],@[]),@"punctuation-online",YES,requests);[p start];
+ NSCAssert(requests.count==1&&[[(ReaderPlusFakeAudioRequest*)requests[0]text]isEqual:after]&&p.currentSegment.paragraph==1,@"Only actual text reaches Microsoft");
+ [(ReaderPlusFakeAudioRequest*)requests[0]finish:nil error:error];NSCAssert(p.currentSegment.error==error,@"Normal text failures remain visible");[p cancel];
+ [requests removeAllObjects];p=pipeline(testDocument(silent,silent),@"punctuation-only",YES,requests);[p start];NSCAssert(!p.currentSegment&&requests.count==0&&p.networkRequestCount==0,@"All-punctuation books need no synthesis");[p cancel];
+ p=[[ReaderPlusAudioPipeline alloc]initWithDocument:punctuated section:0 paragraph:2 voice:@"pipeline-test-voice" rate:20 allowNetwork:NO requestFactory:nil];[p start];NSCAssert(p.currentSegment.paragraph==4&&p.currentSegment.audio,@"Starting on punctuation resumes at the next original text position");[p cancel];
+ // Whole-book download shares the filter, including cached books and empty totals.
+ NSUInteger before=RPNetworkSynthesisCount();RPDownload *download=[RPDownload new];__block BOOL completed=NO;__block NSUInteger total=99,done=99;
+ [download start:testDocument(silent,silent) progress:^(NSUInteger n,NSUInteger t){done=n;total=t;}completion:^(NSError *e){NSCAssert(!e,@"Punctuation-only download succeeds");completed=YES;}];
+ NSCAssert(completed&&done==0&&total==0&&!download.active&&RPNetworkSynthesisCount()==before,@"Punctuation-only download completes without network");
+ NSUserDefaults *prefs=[NSUserDefaults standardUserDefaults];NSString *voice=RPCurrentVoice();NSInteger rate=MAX(-50,MIN(100,[prefs integerForKey:@"speech.rate"]));
+ NSCAssert(RPStoreAudio(audio,texts[0],voice,rate,nil)&&RPStoreAudio(audio,texts[1],voice,rate,nil),@"Cache download fixture");completed=NO;
+ [download start:testDocument(@[@"。",texts[0],@"！",texts[1]],silent) progress:^(NSUInteger n,NSUInteger t){done=n;total=t;}completion:^(NSError *e){NSCAssert(!e,@"Cached text download succeeds");completed=YES;}];
+ NSCAssert(completed&&done==2&&total==2&&RPNetworkSynthesisCount()==before,@"Download progress counts only spoken paragraphs");
+ drain();puts("PASS: ordered lookahead, punctuation skipping, original positions, download filtering, concurrency, cancellation and error propagation");
 }

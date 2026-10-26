@@ -49,8 +49,10 @@
  while(self.queue.count<3&&self.cursorSection<(NSInteger)sections.count){
   NSArray *paragraphs=sections[self.cursorSection][@"paragraphs"];
   if(self.cursorParagraph>=(NSInteger)paragraphs.count){self.cursorSection++;self.cursorParagraph=0;continue;}
-  ReaderPlusAudioSegment *segment=[ReaderPlusAudioSegment new];segment.section=self.cursorSection;segment.paragraph=self.cursorParagraph++;
-  segment.text=paragraphs[segment.paragraph];[self.queue addObject:segment];
+  NSInteger paragraph=self.cursorParagraph++;NSString *text=paragraphs[paragraph];
+  if(!RPHasSpeechContent(text))continue;
+  ReaderPlusAudioSegment *segment=[ReaderPlusAudioSegment new];segment.section=self.cursorSection;segment.paragraph=paragraph;
+  segment.text=text;[self.queue addObject:segment];
  }
 }
 -(void)pump{

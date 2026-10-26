@@ -6,6 +6,16 @@
 static NSString *const token=@"6A5AA1D4EAFF4E9FB37E23D68491D6F4";
 static NSUInteger requestCount=0;
 NSUInteger RPNetworkSynthesisCount(void){return requestCount;}
+BOOL RPHasSpeechContent(NSString *text){
+ static NSCharacterSet *content;static dispatch_once_t once;
+ dispatch_once(&once,^{
+  NSMutableCharacterSet *ignored=[[NSCharacterSet punctuationCharacterSet]mutableCopy];
+  [ignored formUnionWithCharacterSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+  [ignored formUnionWithCharacterSet:[NSCharacterSet controlCharacterSet]];
+  content=[ignored invertedSet];
+ });
+ return text.length&&[text rangeOfCharacterFromSet:content].location!=NSNotFound;
+}
 static NSString *const agent=@"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0";
 NSString *RPXMLEscape(NSString *text){
  NSMutableString *s=[NSMutableString string];for(NSUInteger i=0;i<text.length;i++){unichar c=[text characterAtIndex:i];if(c>=32||c==9||c==10||c==13)[s appendFormat:@"%C",c];}
@@ -112,7 +122,12 @@ static NSError *RPSpeechError(NSString *s){return [NSError errorWithDomain:@"Rea
 }
 -(void)nextSystemParagraph{
  if(!self.active)return;NSArray *sections=self.document[@"sections"];
- while(self.section<(NSInteger)sections.count){NSArray *paragraphs=sections[self.section][@"paragraphs"];if(self.paragraph<(NSInteger)paragraphs.count)break;self.section++;self.paragraph=0;}
+ while(self.section<(NSInteger)sections.count){
+  NSArray *paragraphs=sections[self.section][@"paragraphs"];
+  if(self.paragraph>=(NSInteger)paragraphs.count){self.section++;self.paragraph=0;continue;}
+  if(RPHasSpeechContent(paragraphs[self.paragraph]))break;
+  self.paragraph++;
+ }
  if(self.section>=(NSInteger)sections.count){[self stop];return;}
  NSString *text=sections[self.section][@"paragraphs"][self.paragraph];if(self.moved)self.moved(self.section,self.paragraph);
  NSString *identifier=[[NSUserDefaults standardUserDefaults]stringForKey:@"compat.systemVoice"];

@@ -2,6 +2,8 @@
 #import <AVFoundation/AVFoundation.h>
 #import "RPAudioPipeline.h"
 NSString *RPXMLEscape(NSString *text);
+// Punctuation, whitespace and control characters alone need no audio.
+BOOL RPHasSpeechContent(NSString *text);
 NSUInteger RPNetworkSynthesisCount(void);
 @interface ReaderPlusSpeechConnection:NSObject<ReaderPlusAudioRequest>
 -(void)synthesize:(NSString*)text voice:(NSString*)voice locale:(NSString*)locale rate:(NSInteger)rate completion:(void(^)(NSData*,NSError*))completion;

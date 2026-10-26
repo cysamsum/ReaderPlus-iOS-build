@@ -25,7 +25,7 @@ BOOL RPStoreAudio(NSData *audio,NSString *text,NSString *voice,NSInteger rate,NS
 @implementation RPDownload
 -(void)cancel{self.generation++;self.active=NO;[self.connection cancel];self.connection=nil;self.progress=nil;self.completion=nil;}
 -(void)start:(NSDictionary*)document progress:(void(^)(NSUInteger,NSUInteger))progress completion:(void(^)(NSError*))completion{
- [self cancel];NSMutableArray *texts=[NSMutableArray array];for(NSDictionary *section in document[@"sections"])[texts addObjectsFromArray:section[@"paragraphs"]];self.texts=texts;self.voice=RPCurrentVoice();NSArray *parts=[self.voice componentsSeparatedByString:@"-"];self.locale=parts.count>=2?[NSString stringWithFormat:@"%@-%@",parts[0],parts[1]]:@"zh-CN";self.rate=MAX(-50,MIN(100,[[NSUserDefaults standardUserDefaults]integerForKey:@"speech.rate"]));self.index=0;self.progress=progress;self.completion=completion;self.active=YES;[self next];
+ [self cancel];NSMutableArray *texts=[NSMutableArray array];for(NSDictionary *section in document[@"sections"])for(NSString *text in section[@"paragraphs"])if(RPHasSpeechContent(text))[texts addObject:text];self.texts=texts;self.voice=RPCurrentVoice();NSArray *parts=[self.voice componentsSeparatedByString:@"-"];self.locale=parts.count>=2?[NSString stringWithFormat:@"%@-%@",parts[0],parts[1]]:@"zh-CN";self.rate=MAX(-50,MIN(100,[[NSUserDefaults standardUserDefaults]integerForKey:@"speech.rate"]));self.index=0;self.progress=progress;self.completion=completion;self.active=YES;[self next];
 }
 -(void)finish:(NSError*)error{void(^done)(NSError*)=self.completion;[self cancel];if(done)done(error);}
 -(void)next{
