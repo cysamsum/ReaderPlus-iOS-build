@@ -1,6 +1,12 @@
 # 拾页 Reader+ — iOS 9 兼容版
 
-UIKit 阅读器，支持 TXT、Markdown、EPUB 与 PDF 原页，提供微软在线语音、预下载音频离线播放、iOS 系统语音。1.2.0（build 5）已由 cysamsum 账号构建。
+UIKit 阅读器，支持 TXT、Markdown、EPUB 与 PDF 原页，提供微软在线语音、预下载音频离线播放、iOS 系统语音。本次修订为 1.2.1（build 6），由 cysamsum 账号构建，结果见 Actions。
+
+## iOS 9/10 本机导入
+
+旧系统的系统文档选择器要求签名具备 iCloud 容器 entitlement。未配置该能力时会在初始化阶段触发系统断言。1.2.1 在 iOS 9/10 直接使用 App 内的文档浏览器：通过电脑文件共享把 TXT、EPUB、PDF 或 MD 传入“拾页 Reader+”，点击加号后即可选取；子文件夹可进入，右上角可刷新。也可以从其他 App 选择“拷贝到拾页”。
+
+iOS 11+ 使用系统选择器，接收 `public.data` / `public.content` 文档类型；若系统初始化失败则回退到本机浏览器。本机浏览器不会读取其他 App 的私有目录，也不需要伪造 iCloud entitlement。
 
 ## 连续朗读预缓冲
 
@@ -18,7 +24,7 @@ python3 scripts/build_compat.py
 python3 scripts/build_compat.py --simulator
 bash scripts/compat_tests.sh
 bash scripts/compat_simulator.sh
-python3 scripts/verify_compat_ipa.py dist/ReaderPlus-1.2.0-iOS9-26.1-unsigned.ipa
+python3 scripts/verify_compat_ipa.py dist/ReaderPlus-1.2.1-iOS9-26.1-unsigned.ipa
 ```
 
 设备包为 armv7 + arm64，按 iOS 9.0 最低系统编译；使用固定 Theos SDK 提交 `0222fd5413cf4b9af096f37b4621afa2688572f7` 的 iOS 9.3 头文件、12.4 设备链接桩及 Xcode 16.4 classic linker。当前模拟器回归目标为 iOS 26.1，不能将最低系统声明视作所有旧版本真机已通过。
@@ -41,8 +47,3 @@ PDF 在 iOS 9/10 支持原页阅读，文字提取需要系统提供 PDFKit（iO
 
 这里只发布用户授权的最小构建源码、示例和许可，不包含账号凭据、用户书籍或 Windows 语音包。
 
-## 已验证构建
-
-[构建 40281145519](https://github.com/cysamsum/ReaderPlus-iOS-build/actions/runs/40281145519) 全部通过，精确源码提交 `6909831cacf6bf8c5a3a494f670e8b47b98eee80`。iOS 26.1 模拟器三段在线播放的两次换段均已有缓冲，未缓冲换段为 0；跨章、暂停恢复、系统语音与缓存 MP3 播放通过。缓存播放新增合成请求为 0（测试并未物理断开主机网络）。旧系统真机及持续弱网仍需复测。
-
-IPA SHA256：`a0dc5d124ab8f76d9b1a0b530235ef2f79cbef82e940a7c560626957c9d4cfdd`。Actions 主产物同时提供精确源码 ZIP 与校验记录。

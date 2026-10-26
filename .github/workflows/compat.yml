@@ -28,12 +28,12 @@ jobs:
           set -o pipefail
           python3 scripts/build_compat.py 2>&1 | tee build/compat-device.log
       - name: Verify and save unsigned candidate
-        run: python3 scripts/verify_compat_ipa.py dist/ReaderPlus-1.2.0-iOS9-26.1-unsigned.ipa
+        run: python3 scripts/verify_compat_ipa.py dist/ReaderPlus-1.2.1-iOS9-26.1-unsigned.ipa
       - uses: actions/upload-artifact@v4
         with:
           name: ReaderPlus-iOS9-candidate
           path: |
-            dist/ReaderPlus-1.2.0-*.ipa
+            dist/ReaderPlus-1.2.1-*.ipa
             dist/compat-verification.json
           retention-days: 7
       - name: Compile identical UIKit sources for Simulator
@@ -46,16 +46,16 @@ jobs:
         timeout-minutes: 10
         run: bash scripts/compat_simulator.sh
       - name: Verify universal IPA
-        run: python3 scripts/verify_compat_ipa.py dist/ReaderPlus-1.2.0-iOS9-26.1-unsigned.ipa
+        run: python3 scripts/verify_compat_ipa.py dist/ReaderPlus-1.2.1-iOS9-26.1-unsigned.ipa
       - name: Package exact source and checksums
         run: |
           git archive --format=zip --prefix=ReaderPlus/ --output=dist/ReaderPlus-iOS9-source.zip HEAD
-          shasum -a 256 dist/ReaderPlus-1.2.0-*.ipa dist/ReaderPlus-iOS9-source.zip > dist/COMPAT-SHA256SUMS.txt
+          shasum -a 256 dist/ReaderPlus-1.2.1-*.ipa dist/ReaderPlus-iOS9-source.zip > dist/COMPAT-SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
           name: ReaderPlus-iOS9-universal-IPA
           path: |
-            dist/ReaderPlus-1.2.0-*.ipa
+            dist/ReaderPlus-1.2.1-*.ipa
             dist/ReaderPlus-iOS9-source.zip
             dist/COMPAT-SHA256SUMS.txt
             dist/compat-verification.json

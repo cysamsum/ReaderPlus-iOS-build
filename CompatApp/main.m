@@ -4,6 +4,7 @@
 #import "RPSpeech.h"
 #import "RPAudioCache.h"
 #import "RPAudioAudit.h"
+#import "RPImportBrowser.h"
 
 static UIColor *green(void){return [UIColor colorWithRed:.12 green:.42 blue:.36 alpha:1];}
 static void alert(UIViewController *vc,NSString *title,NSString *message){UIAlertController *a=[UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];[a addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleDefault handler:nil]];[vc presentViewController:a animated:YES completion:nil];}
@@ -74,7 +75,7 @@ static NSArray *defaultVoices(void){return @[
  if(p.section==1){c.textLabel.text=@[@"朗读方式",@"语言与音色",@"语速",@"更新微软音色列表"][p.row];c.detailTextLabel.text=p.row==0?RPCurrentMode():p.row==1?([d stringForKey:@"speech.voice"]?:@"晓晓"):p.row==2?[NSString stringWithFormat:@"%+ld%%",(long)[d integerForKey:@"speech.rate"]]:@"";}
  if(p.section==1&&p.row==1&&[RPCurrentMode()isEqual:@"系统语音（离线）"]){NSString *identifier=[d stringForKey:@"compat.systemVoice"];AVSpeechSynthesisVoice *voice=identifier.length?[AVSpeechSynthesisVoice voiceWithIdentifier:identifier]:nil;c.detailTextLabel.text=voice?[NSString stringWithFormat:@"%@ · %@",voice.name,voice.language]:@"按语言自动选择";}
  if(p.section==2){c.textLabel.text=@"允许发送朗读段落";UISwitch *s=[UISwitch new];s.on=[d boolForKey:@"speech.consent"];[s addTarget:self action:@selector(consent:) forControlEvents:UIControlEventValueChanged];c.accessoryView=s;}
- if(p.section==3){c.textLabel.text=@[@"拾页 Reader+ 1.2.0",@"目标系统 iOS 9–26.1",@"开源许可"][p.row];if(p.row<2)c.accessoryType=UITableViewCellAccessoryNone;}
+ if(p.section==3){c.textLabel.text=@[@"拾页 Reader+ 1.2.1",@"目标系统 iOS 9–26.1",@"开源许可"][p.row];if(p.row<2)c.accessoryType=UITableViewCellAccessoryNone;}
  return c;
 }
 -(void)consent:(UISwitch*)s{[[NSUserDefaults standardUserDefaults]setBool:s.on forKey:@"speech.consent"];if(self.changed)self.changed();}
@@ -178,6 +179,7 @@ static NSArray *defaultVoices(void){return @[
 @interface RPBooks:UITableViewController<UIDocumentPickerDelegate>
 @property(nonatomic,strong)RPLibrary *library;
 @property(nonatomic)BOOL importing;
+@property(nonatomic)BOOL importSmokeRan;
 -(void)importURL:(NSURL*)url;
 @end
 @implementation RPBooks
@@ -188,6 +190,19 @@ static NSArray *defaultVoices(void){return @[
  if([[NSProcessInfo processInfo].arguments containsObject:@"--smoke-reader"])dispatch_async(dispatch_get_main_queue(),^{[self sample];});
 }
 -(void)viewWillAppear:(BOOL)a{[super viewWillAppear:a];[self.tableView reloadData];}
+-(void)viewDidAppear:(BOOL)animated{
+ [super viewDidAppear:animated];
+ if(!self.importSmokeRan&&[[NSProcessInfo processInfo].arguments containsObject:@"--smoke-import"]){
+  self.importSmokeRan=YES;[self importTapped];
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW,NSEC_PER_SEC),dispatch_get_main_queue(),^{
+   UIViewController *presented=self.presentedViewController;BOOL expectedLocal=[NSProcessInfo processInfo].operatingSystemVersion.majorVersion<11||[[NSProcessInfo processInfo].arguments containsObject:@"--smoke-local-picker"];
+   BOOL local=[presented isKindOfClass:[UINavigationController class]]&&[[(UINavigationController*)presented topViewController]isKindOfClass:[ReaderPlusImportBrowser class]];
+   BOOL system=[presented isKindOfClass:[UIDocumentPickerViewController class]];
+   NSDictionary *report=@{@"systemVersion":[UIDevice currentDevice].systemVersion,@"expectedLocal":@(expectedLocal),@"localPickerVisible":@(local),@"systemPickerVisible":@(system),@"passed":@(presented.view.window&&(expectedLocal?local:system))};
+   NSString *documents=NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,NSUserDomainMask,YES)[0];writeJSON(report,[documents stringByAppendingPathComponent:@"import-regression.json"],nil);
+  });
+ }
+}
 -(void)sample{NSURL *url=[[NSBundle mainBundle]URLForResource:@"体验电子书" withExtension:@"epub"];if(url)[self importURL:url];}
 -(NSInteger)tableView:(UITableView*)t numberOfRowsInSection:(NSInteger)s{return self.library.books.count;}
 -(UITableViewCell*)tableView:(UITableView*)t cellForRowAtIndexPath:(NSIndexPath*)p{NSDictionary *b=self.library.books[p.row];UITableViewCell *c=[[UITableViewCell alloc]initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:nil];c.textLabel.text=b[@"title"];c.textLabel.font=[UIFont boldSystemFontOfSize:19];c.detailTextLabel.text=[NSString stringWithFormat:@"%@  ·  第 %ld 节/页",[b[@"format"]uppercaseString],(long)[b[@"position"][@"section"]integerValue]+1];c.accessoryType=UITableViewCellAccessoryDisclosureIndicator;return c;}
@@ -195,9 +210,25 @@ static NSArray *defaultVoices(void){return @[
 -(void)open:(NSDictionary*)book{RPReader *vc=[RPReader new];vc.book=book;vc.library=self.library;[self.navigationController pushViewController:vc animated:YES];}
 -(void)tableView:(UITableView*)t didSelectRowAtIndexPath:(NSIndexPath*)p{[self open:self.library.books[p.row]];}
 -(void)tableView:(UITableView*)t commitEditingStyle:(UITableViewCellEditingStyle)style forRowAtIndexPath:(NSIndexPath*)p{if(style!=UITableViewCellEditingStyleDelete)return;NSDictionary *book=self.library.books[p.row];UIAlertController *a=[UIAlertController alertControllerWithTitle:@"删除书籍？" message:@"将删除本地副本和阅读进度。" preferredStyle:UIAlertControllerStyleAlert];[a addAction:[UIAlertAction actionWithTitle:@"删除" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *x){NSError *error=nil;if(![self.library remove:book error:&error])alert(self,@"删除失败",error.localizedDescription?:self.library.loadError);[self.tableView reloadData];}]];[a addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];[self presentViewController:a animated:YES completion:nil];}
--(void)importTapped{if(self.importing)return;UIDocumentPickerViewController *picker=[[UIDocumentPickerViewController alloc]initWithDocumentTypes:@[@"public.item"]inMode:UIDocumentPickerModeImport];picker.delegate=self;[self presentViewController:picker animated:YES completion:nil];}
--(void)documentPicker:(UIDocumentPickerViewController*)p didPickDocumentAtURL:(NSURL*)url{[self importURL:url];}
--(void)documentPicker:(UIDocumentPickerViewController*)p didPickDocumentsAtURLs:(NSArray*)urls{if(urls.count)[self importURL:urls[0]];}
+-(void)presentLocalImport{
+ NSURL *documents=[[NSFileManager defaultManager]URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask].firstObject;
+ ReaderPlusImportBrowser *browser=[[ReaderPlusImportBrowser alloc]initWithRoot:documents directory:documents];__weak typeof(self) weak=self;
+ browser.picked=^(NSURL *url){RPBooks *books=weak;[books dismissViewControllerAnimated:YES completion:^{[books importURL:url];}];};
+ UINavigationController *nav=[[UINavigationController alloc]initWithRootViewController:browser];nav.modalPresentationStyle=UIModalPresentationFormSheet;[self presentViewController:nav animated:YES completion:nil];
+}
+-(void)importTapped{
+ if(self.importing||self.presentedViewController)return;
+ // Real iOS 9 asserts in the native picker's initializer without provisioned
+ // iCloud container entitlements. The local browser works with USB sharing and
+ // never depends on cloud signing capabilities or installed document providers.
+ if([NSProcessInfo processInfo].operatingSystemVersion.majorVersion<11||[[NSProcessInfo processInfo].arguments containsObject:@"--smoke-local-picker"]){[self presentLocalImport];return;}
+ UIDocumentPickerViewController *picker=nil;
+ @try{picker=[[UIDocumentPickerViewController alloc]initWithDocumentTypes:@[@"public.data",@"public.content"]inMode:UIDocumentPickerModeImport];}
+ @catch(NSException *exception){NSLog(@"System document picker unavailable: %@",exception.reason);[self presentLocalImport];return;}
+ picker.delegate=self;picker.modalPresentationStyle=UIModalPresentationFormSheet;picker.popoverPresentationController.barButtonItem=self.navigationItem.rightBarButtonItem;[self presentViewController:picker animated:YES completion:nil];
+}
+-(void)documentPicker:(UIDocumentPickerViewController*)p didPickDocumentAtURL:(NSURL*)url{[p dismissViewControllerAnimated:YES completion:^{[self importURL:url];}];}
+-(void)documentPicker:(UIDocumentPickerViewController*)p didPickDocumentsAtURLs:(NSArray*)urls{if(urls.count)[p dismissViewControllerAnimated:YES completion:^{[self importURL:urls[0]];}];}
 -(void)importURL:(NSURL*)url{if(self.importing)return;self.importing=YES;self.navigationItem.rightBarButtonItem.enabled=NO;self.title=@"正在导入…";[self.library importURL:url completion:^(NSDictionary *book,NSError *error){self.importing=NO;self.navigationItem.rightBarButtonItem.enabled=YES;self.title=@"拾页 Reader+";[self.tableView reloadData];if(error)alert(self,@"导入失败",error.localizedDescription);else [self open:book];}];}
 @end
 @interface RPAppDelegate:UIResponder<UIApplicationDelegate>

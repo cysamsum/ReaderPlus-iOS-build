@@ -4,8 +4,10 @@
 #import "RPSpeech.h"
 #import "RPAudioCache.h"
 void ReaderPlusRunPipelineTests(void);
+void ReaderPlusRunImportTests(void);
 int main(int argc,char **argv){@autoreleasepool{
  ReaderPlusRunPipelineTests();
+ ReaderPlusRunImportTests();
  char token[82];rp_gec_v2(1700000000,token);NSCAssert(!strcmp(token,"2CD23A2CA0B2595A-F3C846C370E05F9CC83ACC5F995C5F5D87A4D0F14CE8936A0F902E64099E38A2"),@"GEC vector mismatch");
  const uint8_t gb[]={0xD6,0xD0,0xCE,0xC4};NSCAssert([RPDecode([NSData dataWithBytes:gb length:4])isEqual:@"中文"],@"GB18030 decode");
  NSString *s=[@"中文👨‍👩‍👧‍👦é。" stringByPaddingToLength:4000 withString:@"中文👨‍👩‍👧‍👦é。" startingAtIndex:0];NSArray *chunks=RPParagraphs(s);NSCAssert([[chunks componentsJoinedByString:@""]isEqual:s],@"Text lost at boundary");
