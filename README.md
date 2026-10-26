@@ -1,6 +1,12 @@
 # 拾页 Reader+ — iOS 9 兼容版
 
-UIKit 阅读器，支持 TXT、Markdown、EPUB 与 PDF 原页，提供微软在线语音、预下载音频离线播放、iOS 系统语音。本次修订为 1.2.1（build 6），由 cysamsum 账号构建，结果见 Actions。
+**1.2.1（build 7）已通过 [云端构建与回归 40324991581](https://github.com/cysamsum/ReaderPlus-iOS-build/actions/runs/40324991581)。** 精确应用源码提交为 `56358f684a9781fbb28afa1fa159caecff490b59`。iOS 26.1 原生及本机导入界面、系统朗读、离线播放和在线预缓冲回归全部通过。
+
+在 iPad mini 第一代 / iOS 9.3.5 上实际捕获旧版点击“＋”时的 iCloud entitlement 断言；现已使用本机导入列表修复。TXT/EPUB 均已实际入库，最终 build 7 覆盖安装后原书库文件哈希保持一致，用户再次确认 TXT 进入阅读页。此证据不代表全部系统或文件提供方均已验证。
+
+未签名 IPA SHA256：`8cbc51984428d1417d553a351f0f9c5106cdc22dfb6c4b26796cdb203397cb3e`；精确云端源码包 SHA256：`67c5905b35fac09e2f881529dc104730d66ae3006914553fd8995bbc53466df9`。二者可从上述构建的 `ReaderPlus-iOS9-universal-IPA` 下载。
+
+UIKit 阅读器，支持 TXT、Markdown、EPUB 与 PDF 原页，提供微软在线语音、预下载音频离线播放、iOS 系统语音。本次修订为 1.2.1（build 7），由 cysamsum 账号构建，结果见 Actions。
 
 ## iOS 9/10 本机导入
 
