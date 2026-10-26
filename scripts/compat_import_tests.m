@@ -17,9 +17,9 @@ void ReaderPlusRunImportTests(void){
  NSSet *names=[NSSet setWithArray:[files valueForKey:@"lastPathComponent"]];
  NSCAssert(([names isEqual:[NSSet setWithArray:@[@"Books",@"Book.TXT",@"Book.epub",@"Book.pdf",@"Notes.md"]]]),@"List all supported books, omit internal/hidden/unsupported/symlink files");
  NSCAssert([files[0]lastPathComponent]&&[[files[0]lastPathComponent]isEqual:@"Books"],@"Folders precede files");
- NSArray *children=RPLocalImportFiles(documents,folder,&error);NSCAssert(children.count==1&&[children[0]isEqual:child],@"Navigate within Documents");
+ NSArray *children=RPLocalImportFiles(documents,folder,&error);NSString *selected=children.count?[children[0]URLByResolvingSymlinksInPath].path:nil;NSCAssert(children.count==1&&[selected isEqual:child.URLByResolvingSymlinksInPath.path],@"Navigate within Documents: %@ expected %@ error %@",children,child,error);
  NSDictionary *book=RPImportDocument(children[0],@"Local book",&error);NSCAssert(book&&!error&&[book[@"sections"]count]>0,@"Selected local URL imports through the existing reader parser");
  error=nil;NSCAssert(!RPLocalImportFiles(documents,fixture,&error)&&error,@"Reject navigation outside Documents");
- NSCAssert([fixture.path hasPrefix:NSTemporaryDirectory()],@"Cleanup stays within the generated temporary fixture");[fm removeItemAtURL:fixture error:nil];
+ NSString *tempRoot=[NSURL fileURLWithPath:NSTemporaryDirectory()].URLByResolvingSymlinksInPath.path;NSCAssert([fixture.URLByResolvingSymlinksInPath.path hasPrefix:[tempRoot stringByAppendingString:@"/"]],@"Cleanup stays within the generated temporary fixture");[fm removeItemAtURL:fixture error:nil];
  puts("PASS: local import catalog, supported extensions, subfolders, selected-file parsing and directory boundaries");
 }
