@@ -1,6 +1,6 @@
 # 拾页 Reader+ — iOS 9 兼容版
 
-UIKit 阅读器，支持 TXT、Markdown、EPUB 与 PDF 原页，提供微软在线语音、预下载音频离线播放、iOS 系统语音。本次 1.2.0（build 5）将由 cysamsum 账号构建。
+UIKit 阅读器，支持 TXT、Markdown、EPUB 与 PDF 原页，提供微软在线语音、预下载音频离线播放、iOS 系统语音。1.2.0（build 5）已由 cysamsum 账号构建。
 
 ## 连续朗读预缓冲
 
@@ -40,3 +40,9 @@ PDF 在 iOS 9/10 支持原页阅读，文字提取需要系统提供 PDFKit（iO
 `CompatApp/RPGEC.c` 从 rany2/edge-tts 提交 `bd44c1d1aaebdc1db7f47456ee12431b42ec7cac` 移植，保留 LGPLv3；完整许可位于 `ThirdParty/`。修改后可以按上述脚本重建应用并自行签名安装，精确源码随成功构建的 IPA 提供。
 
 这里只发布用户授权的最小构建源码、示例和许可，不包含账号凭据、用户书籍或 Windows 语音包。
+
+## 已验证构建
+
+[构建 40281145519](https://github.com/cysamsum/ReaderPlus-iOS-build/actions/runs/40281145519) 全部通过，精确源码提交 `6909831cacf6bf8c5a3a494f670e8b47b98eee80`。iOS 26.1 模拟器三段在线播放的两次换段均已有缓冲，未缓冲换段为 0；跨章、暂停恢复、系统语音与缓存 MP3 播放通过。缓存播放新增合成请求为 0（测试并未物理断开主机网络）。旧系统真机及持续弱网仍需复测。
+
+IPA SHA256：`a0dc5d124ab8f76d9b1a0b530235ef2f79cbef82e940a7c560626957c9d4cfdd`。Actions 主产物同时提供精确源码 ZIP 与校验记录。
