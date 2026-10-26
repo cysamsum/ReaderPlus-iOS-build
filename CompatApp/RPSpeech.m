@@ -61,46 +61,121 @@ static NSError *RPSpeechError(NSString *s){return [NSError errorWithDomain:@"Rea
 @end
 #if TARGET_OS_IPHONE
 @interface RPSpeech()
-@property(nonatomic,strong)ReaderPlusSpeechConnection *connection;
-@property(nonatomic,strong)AVAudioPlayer *player;
+@property(nonatomic,strong)ReaderPlusAudioPipeline *pipeline;
+@property(nonatomic,strong)ReaderPlusAudioSegment *playingSegment,*announcedSegment,*preparedSegment;
+@property(nonatomic,strong)AVAudioPlayer *player,*preparedPlayer;
 @property(nonatomic,strong)AVSpeechSynthesizer *synth;
 @property(nonatomic,strong)AVSpeechUtterance *utterance;
 @property(nonatomic,strong)NSDictionary *document;
-@property(nonatomic)NSInteger section,paragraph;
+@property(nonatomic,copy)NSString *mode,*voice,*locale;
+@property(nonatomic)NSInteger section,paragraph,rate;
 @property(nonatomic,readwrite)BOOL active,paused,loading;
-@property(nonatomic)NSUInteger generation;
+@property(nonatomic)BOOL hasStartedAudio;
+@property(nonatomic)NSUInteger generation,bufferedTransitions,unbufferedTransitions,preparedAhead,requestsBeforeFirstPlayback;
+@property(nonatomic)NSTimeInterval lastFinishTime,maximumTransitionGap;
 @end
 @implementation RPSpeech
--(instancetype)init{if((self=[super init])){self.synth=[AVSpeechSynthesizer new];self.synth.delegate=self;[[NSNotificationCenter defaultCenter]addObserver:self selector:@selector(interrupted:) name:AVAudioSessionInterruptionNotification object:nil];[[NSNotificationCenter defaultCenter]addObserver:self selector:@selector(route:) name:AVAudioSessionRouteChangeNotification object:nil];}return self;}
--(void)dealloc{[[NSNotificationCenter defaultCenter]removeObserver:self];[self.connection cancel];}
+-(instancetype)init{
+ if((self=[super init])){
+  self.synth=[AVSpeechSynthesizer new];self.synth.delegate=self;
+  [[NSNotificationCenter defaultCenter]addObserver:self selector:@selector(interrupted:) name:AVAudioSessionInterruptionNotification object:nil];
+  [[NSNotificationCenter defaultCenter]addObserver:self selector:@selector(route:) name:AVAudioSessionRouteChangeNotification object:nil];
+ }
+ return self;
+}
+-(void)dealloc{[[NSNotificationCenter defaultCenter]removeObserver:self];[self.pipeline cancel];}
 -(void)interrupted:(NSNotification*)n{if([n.userInfo[AVAudioSessionInterruptionTypeKey]integerValue]==AVAudioSessionInterruptionTypeBegan){if(self.loading)[self stop];else if(self.active&&!self.paused)[self pauseOrResume];}}
 -(void)route:(NSNotification*)n{if([n.userInfo[AVAudioSessionRouteChangeReasonKey]integerValue]==AVAudioSessionRouteChangeReasonOldDeviceUnavailable){if(self.loading)[self stop];else if(self.active&&!self.paused)[self pauseOrResume];}}
 -(void)notify{if(self.changed)self.changed();}
--(void)stop{self.generation++;[self.connection cancel];self.connection=nil;[self.player stop];self.player=nil;self.utterance=nil;[self.synth stopSpeakingAtBoundary:AVSpeechBoundaryImmediate];self.active=NO;self.paused=NO;self.loading=NO;[[AVAudioSession sharedInstance]setActive:NO withOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation error:nil];[self notify];}
+-(void)stop{
+ self.generation++;self.pipeline.changed=nil;[self.pipeline cancel];self.pipeline=nil;
+ [self.player stop];self.player=nil;[self.preparedPlayer stop];self.preparedPlayer=nil;
+ self.playingSegment=nil;self.announcedSegment=nil;self.preparedSegment=nil;self.utterance=nil;
+ [self.synth stopSpeakingAtBoundary:AVSpeechBoundaryImmediate];self.active=NO;self.paused=NO;self.loading=NO;
+ [[AVAudioSession sharedInstance]setActive:NO withOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation error:nil];[self notify];
+}
 -(void)fail:(NSError*)error{[self stop];if(self.failed)self.failed(error.localizedDescription?:@"朗读失败。");}
 -(void)start:(NSDictionary*)document section:(NSInteger)section paragraph:(NSInteger)paragraph{
- [self stop];
- self.document=document;self.section=MAX(0,section);self.paragraph=MAX(0,paragraph);self.active=YES;
- NSError *error=nil;[[AVAudioSession sharedInstance]setCategory:AVAudioSessionCategoryPlayback withOptions:0 error:&error];if(!error)[[AVAudioSession sharedInstance]setMode:AVAudioSessionModeSpokenAudio error:&error];if(!error)[[AVAudioSession sharedInstance]setActive:YES error:&error];if(error){[self fail:error];return;}[self next];
+ [self stop];self.document=document;self.section=MAX(0,section);self.paragraph=MAX(0,paragraph);self.active=YES;
+ self.bufferedTransitions=0;self.unbufferedTransitions=0;self.preparedAhead=0;self.requestsBeforeFirstPlayback=0;self.hasStartedAudio=NO;self.lastFinishTime=0;self.maximumTransitionGap=0;
+ NSUserDefaults *prefs=[NSUserDefaults standardUserDefaults];self.mode=RPCurrentMode();self.voice=RPCurrentVoice();self.rate=MAX(-50,MIN(100,[prefs integerForKey:@"speech.rate"]));
+ NSArray *parts=[self.voice componentsSeparatedByString:@"-"];self.locale=parts.count>=2?[NSString stringWithFormat:@"%@-%@",parts[0],parts[1]]:@"zh-CN";
+ NSError *error=nil;[[AVAudioSession sharedInstance]setCategory:AVAudioSessionCategoryPlayback withOptions:0 error:&error];
+ if(!error)[[AVAudioSession sharedInstance]setMode:AVAudioSessionModeSpokenAudio error:&error];
+ if(!error)[[AVAudioSession sharedInstance]setActive:YES error:&error];if(error){[self fail:error];return;}
+ if([self.mode isEqual:@"系统语音（离线）"]){[self nextSystemParagraph];return;}
+ BOOL online=[self.mode isEqual:@"微软在线与已下载音频"]&&[prefs boolForKey:@"speech.consent"];
+ self.loading=YES;self.pipeline=[[ReaderPlusAudioPipeline alloc]initWithDocument:document section:self.section paragraph:self.paragraph voice:self.voice rate:self.rate allowNetwork:online requestFactory:nil];
+ NSUInteger generation=self.generation;__weak typeof(self) weak=self;
+ self.pipeline.changed=^{RPSpeech *s=weak;if(s&&s.active&&s.generation==generation)[s updateBufferedPlayback];};
+ [self.pipeline start];[self notify];
 }
--(void)next{
+-(void)nextSystemParagraph{
  if(!self.active)return;NSArray *sections=self.document[@"sections"];
  while(self.section<(NSInteger)sections.count){NSArray *paragraphs=sections[self.section][@"paragraphs"];if(self.paragraph<(NSInteger)paragraphs.count)break;self.section++;self.paragraph=0;}
  if(self.section>=(NSInteger)sections.count){[self stop];return;}
  NSString *text=sections[self.section][@"paragraphs"][self.paragraph];if(self.moved)self.moved(self.section,self.paragraph);
- NSUserDefaults *prefs=[NSUserDefaults standardUserDefaults];NSString *voice=[prefs stringForKey:@"speech.voice"]?:@"zh-CN-XiaoxiaoNeural";
- NSArray *parts=[voice componentsSeparatedByString:@"-"];NSString *locale=parts.count>=2?[NSString stringWithFormat:@"%@-%@",parts[0],parts[1]]:@"zh-CN";NSInteger rate=[prefs integerForKey:@"speech.rate"];
- if([RPCurrentMode() isEqual:@"系统语音（离线）"]){NSString *identifier=[prefs stringForKey:@"compat.systemVoice"];AVSpeechSynthesisVoice *local=identifier.length?[AVSpeechSynthesisVoice voiceWithIdentifier:identifier]:[AVSpeechSynthesisVoice voiceWithLanguage:locale];if(!local){[self fail:RPSpeechError(@"设备没有安装此语言的系统音色，请先在 iOS 设置中下载，或重新选择系统音色。")];return;}self.loading=NO;self.utterance=[[AVSpeechUtterance alloc]initWithString:text];self.utterance.voice=local;self.utterance.rate=MAX(AVSpeechUtteranceMinimumSpeechRate,MIN(AVSpeechUtteranceMaximumSpeechRate,0.5*(1+rate/200.0)));[self.synth speakUtterance:self.utterance];[self notify];return;}
- NSData *cached=RPCachedAudio(text,voice,rate);if(cached){[self playAudio:cached];return;}
- if([RPCurrentMode() isEqual:@"仅播放离线音频"]){[self fail:RPSpeechError(@"此段尚未下载。请联网后使用“下载全书离线音频”，并保持相同音色和语速。离线音频不支持断网时即时合成新文字。")];return;}
- if(![prefs boolForKey:@"speech.consent"]){[self fail:RPSpeechError(@"此段尚未缓存，请允许在线合成或选择已下载的离线音频。")];return;}
- self.loading=YES;[self notify];self.connection=[ReaderPlusSpeechConnection new];NSUInteger generation=self.generation;__weak typeof(self) weak=self;
- [self.connection synthesize:text voice:voice locale:locale rate:rate completion:^(NSData *audio,NSError *error){RPSpeech *s=weak;if(!s||s.generation!=generation||!s.active)return;if(error){[s fail:error];return;}NSError *saveError=nil;if(!RPStoreAudio(audio,text,voice,rate,&saveError)){[s fail:saveError];return;}[s playAudio:audio];}];
+ NSString *identifier=[[NSUserDefaults standardUserDefaults]stringForKey:@"compat.systemVoice"];
+ AVSpeechSynthesisVoice *local=identifier.length?[AVSpeechSynthesisVoice voiceWithIdentifier:identifier]:[AVSpeechSynthesisVoice voiceWithLanguage:self.locale];
+ if(!local){[self fail:RPSpeechError(@"设备没有安装该语言的系统音色。请先在 iOS 设置中下载，或重新选择系统音色。")];return;}
+ self.loading=NO;self.utterance=[[AVSpeechUtterance alloc]initWithString:text];self.utterance.voice=local;
+ self.utterance.rate=MAX(AVSpeechUtteranceMinimumSpeechRate,MIN(AVSpeechUtteranceMaximumSpeechRate,0.5*(1+self.rate/200.0)));
+ [self.synth speakUtterance:self.utterance];[self notify];
 }
--(void)playAudio:(NSData*)audio{self.loading=NO;NSError *error=nil;self.player=[[AVAudioPlayer alloc]initWithData:audio error:&error];self.player.delegate=self;if(!self.player||![self.player play]){[self fail:error?:RPSpeechError(@"音频无法播放。")];return;}[self notify];}
--(void)pauseOrResume{if(self.loading){[self stop];return;}if(!self.active)return;if(self.paused){[[AVAudioSession sharedInstance]setActive:YES error:nil];[self.player play];[self.synth continueSpeaking];}else{[self.player pause];[self.synth pauseSpeakingAtBoundary:AVSpeechBoundaryImmediate];}self.paused=!self.paused;[self notify];}
--(void)audioPlayerDidFinishPlaying:(AVAudioPlayer*)player successfully:(BOOL)flag{if(player!=self.player||!self.active)return;if(!flag){[self fail:RPSpeechError(@"音频播放失败。")];return;}self.player=nil;self.paragraph++;[self next];}
+-(void)prepareLookaheadPlayer{
+ ReaderPlusAudioSegment *next=self.pipeline.nextSegment;
+ if(next==self.preparedSegment)return;
+ [self.preparedPlayer stop];self.preparedPlayer=nil;self.preparedSegment=nil;
+ if(!next.audio)return;
+ AVAudioPlayer *player=[[AVAudioPlayer alloc]initWithData:next.audio error:nil];
+ if(player&&[player prepareToPlay]){self.preparedPlayer=player;self.preparedSegment=next;if(self.player.isPlaying)self.preparedAhead++;}
+}
+-(void)updateBufferedPlayback{
+ if(!self.active||!self.pipeline)return;
+ ReaderPlusAudioSegment *current=self.pipeline.currentSegment;if(!current){[self stop];return;}
+ if(self.announcedSegment!=current){
+  self.announcedSegment=current;self.section=current.section;self.paragraph=current.paragraph;
+  if(self.moved)self.moved(self.section,self.paragraph);
+ }
+ if(current.error){[self fail:current.error];return;}
+ if(!current.audio){self.loading=YES;[self notify];return;}
+ if(self.playingSegment!=current){
+  NSError *error=nil;AVAudioPlayer *player=nil;
+  if(self.preparedSegment==current){player=self.preparedPlayer;self.preparedPlayer=nil;self.preparedSegment=nil;}
+  else{player=[[AVAudioPlayer alloc]initWithData:current.audio error:&error];if(player&&![player prepareToPlay])player=nil;}
+  if(!player){[self fail:error?:RPSpeechError(@"音频无法播放。")];return;}
+  self.player=player;self.playingSegment=current;self.player.delegate=self;self.loading=NO;
+  if(!self.hasStartedAudio){self.hasStartedAudio=YES;self.requestsBeforeFirstPlayback=self.pipeline.networkRequestCount;}
+  if(!self.paused){
+   if(![self.player play]){[self fail:RPSpeechError(@"音频无法播放。")];return;}
+   if(self.lastFinishTime>0){self.maximumTransitionGap=MAX(self.maximumTransitionGap,[NSDate timeIntervalSinceReferenceDate]-self.lastFinishTime);self.lastFinishTime=0;}
+  }
+ }
+ [self prepareLookaheadPlayer];[self notify];
+}
+-(void)pauseOrResume{
+ // The loading button remains Cancel. Pausing a playing paragraph does not let
+ // lookahead completions start a new player or advance the reading position.
+ if(self.loading){[self stop];return;}if(!self.active)return;
+ if(self.paused){
+  NSError *error=nil;[[AVAudioSession sharedInstance]setActive:YES error:&error];
+  if(error){[self fail:error];return;}
+  if(self.player&&![self.player play]){[self fail:RPSpeechError(@"音频无法继续播放。")];return;}
+  if(self.utterance)[self.synth continueSpeaking];
+ }else{[self.player pause];[self.synth pauseSpeakingAtBoundary:AVSpeechBoundaryImmediate];}
+ self.paused=!self.paused;[self notify];
+}
+-(void)audioPlayerDidFinishPlaying:(AVAudioPlayer*)player successfully:(BOOL)flag{
+ if(player!=self.player||!self.active)return;if(!flag){[self fail:RPSpeechError(@"音频播放失败。")];return;}
+ self.player=nil;self.playingSegment=nil;self.lastFinishTime=[NSDate timeIntervalSinceReferenceDate];
+ [self.pipeline advance];
+ if(self.pipeline.currentSegment){if(self.pipeline.currentSegment.audio)self.bufferedTransitions++;else self.unbufferedTransitions++;}
+ [self updateBufferedPlayback];
+}
 -(void)audioPlayerDecodeErrorDidOccur:(AVAudioPlayer*)player error:(NSError*)error{if(player==self.player)[self fail:error?:RPSpeechError(@"音频解码失败。")];}
--(void)speechSynthesizer:(AVSpeechSynthesizer*)s didFinishSpeechUtterance:(AVSpeechUtterance*)u{if(u!=self.utterance||!self.active)return;self.utterance=nil;self.paragraph++;[self next];}
+-(void)speechSynthesizer:(AVSpeechSynthesizer*)s didFinishSpeechUtterance:(AVSpeechUtterance*)u{if(u!=self.utterance||!self.active)return;self.utterance=nil;self.paragraph++;[self nextSystemParagraph];}
+-(NSDictionary*)playbackStatistics{
+ return @{@"bufferedTransitions":@(self.bufferedTransitions),@"unbufferedTransitions":@(self.unbufferedTransitions),@"lookaheadPreparedWhilePlaying":@(self.preparedAhead),@"requestsBeforeFirstPlayback":@(self.requestsBeforeFirstPlayback),@"maximumTransitionGapSeconds":@(self.maximumTransitionGap)};
+}
 @end
 #endif

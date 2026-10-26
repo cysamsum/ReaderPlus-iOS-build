@@ -67,14 +67,14 @@ static NSArray *defaultVoices(void){return @[
 -(NSInteger)numberOfSectionsInTableView:(UITableView*)t{return 4;}
 -(NSInteger)tableView:(UITableView*)t numberOfRowsInSection:(NSInteger)s{return s==0?2:s==1?4:s==2?1:3;}
 -(NSString*)tableView:(UITableView*)t titleForHeaderInSection:(NSInteger)s{return @[@"阅读",@"朗读",@"隐私",@"关于"][s];}
--(NSString*)tableView:(UITableView*)t titleForFooterInSection:(NSInteger)s{if(s==1)return @"微软在线与缓存：优先播放已有音频，其余联网合成。仅离线音频：不发起网络请求，需先下载全书且保持相同音色、语速。系统语音：使用 iOS 安装的音色，音色与微软不同。Windows 模型包尚无可用的 iOS 引擎。";if(s==2)return @"授权后仅将当前朗读段落通过 TLS 发送至微软。老系统若不支持服务的证书或 TLS，可改用已下载音频。";return nil;}
+-(NSString*)tableView:(UITableView*)t titleForFooterInSection:(NSInteger)s{if(s==1)return @"微软在线与缓存：优先播放已有音频，并提前准备后续段落。仅离线音频：不发起网络请求，需先下载全书且保持相同音色、语速。系统语音：使用 iOS 安装的音色，音色与微软不同。Windows 模型包尚无可用的 iOS 引擎。";if(s==2)return @"授权后将当前及后续预读段落通过 TLS 发送至微软。老系统若不支持服务的证书或 TLS，可改用已下载音频。";return nil;}
 -(UITableViewCell*)tableView:(UITableView*)t cellForRowAtIndexPath:(NSIndexPath*)p{
  NSUserDefaults *d=[NSUserDefaults standardUserDefaults];UITableViewCell *c=[[UITableViewCell alloc]initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:nil];c.accessoryType=UITableViewCellAccessoryDisclosureIndicator;
  if(p.section==0){c.textLabel.text=p.row?@"主题":@"字号";c.detailTextLabel.text=p.row?([d stringForKey:@"reading.theme"]?:@"护眼纸色"):[NSString stringWithFormat:@"%ld",(long)([d integerForKey:@"reading.fontSize"]?:21)];}
  if(p.section==1){c.textLabel.text=@[@"朗读方式",@"语言与音色",@"语速",@"更新微软音色列表"][p.row];c.detailTextLabel.text=p.row==0?RPCurrentMode():p.row==1?([d stringForKey:@"speech.voice"]?:@"晓晓"):p.row==2?[NSString stringWithFormat:@"%+ld%%",(long)[d integerForKey:@"speech.rate"]]:@"";}
  if(p.section==1&&p.row==1&&[RPCurrentMode()isEqual:@"系统语音（离线）"]){NSString *identifier=[d stringForKey:@"compat.systemVoice"];AVSpeechSynthesisVoice *voice=identifier.length?[AVSpeechSynthesisVoice voiceWithIdentifier:identifier]:nil;c.detailTextLabel.text=voice?[NSString stringWithFormat:@"%@ · %@",voice.name,voice.language]:@"按语言自动选择";}
  if(p.section==2){c.textLabel.text=@"允许发送朗读段落";UISwitch *s=[UISwitch new];s.on=[d boolForKey:@"speech.consent"];[s addTarget:self action:@selector(consent:) forControlEvents:UIControlEventValueChanged];c.accessoryView=s;}
- if(p.section==3){c.textLabel.text=@[@"拾页 Reader+ 1.1.0",@"目标系统 iOS 9–26.1",@"开源许可"][p.row];if(p.row<2)c.accessoryType=UITableViewCellAccessoryNone;}
+ if(p.section==3){c.textLabel.text=@[@"拾页 Reader+ 1.2.0",@"目标系统 iOS 9–26.1",@"开源许可"][p.row];if(p.row<2)c.accessoryType=UITableViewCellAccessoryNone;}
  return c;
 }
 -(void)consent:(UISwitch*)s{[[NSUserDefaults standardUserDefaults]setBool:s.on forKey:@"speech.consent"];if(self.changed)self.changed();}

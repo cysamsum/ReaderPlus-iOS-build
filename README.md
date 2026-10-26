@@ -1,12 +1,16 @@
 # 拾页 Reader+ — iOS 9 兼容版
 
-UIKit 文本阅读器，支持 TXT、Markdown、EPUB 和 PDF 原页。集成微软在线自然语音、已下载音频的离线播放、iOS 系统语音。应用版本 1.1.0（build 4）。
+UIKit 阅读器，支持 TXT、Markdown、EPUB 与 PDF 原页，提供微软在线语音、预下载音频离线播放、iOS 系统语音。本次 1.2.0（build 5）将由 cysamsum 账号构建。
 
-## 构建与下载
+## 连续朗读预缓冲
 
-在 **Actions → Build iOS 9 universal IPA → Run workflow** 运行。成功后下载 `ReaderPlus-iOS9-universal-IPA`，包含未签名 IPA、该次提交的精确源码、校验记录和 SHA256。IPA 需要按设备支持的方式签名安装。
+在线朗读同时准备当前段与后续段落；队列保留当前段和后两段，最多两个合成请求并行。播放当前段时，提前生成后续音频并预备下一段播放器，减少每段播完才联网的停顿。第一段仍需首次合成；网络持续慢于播放速度时仍可能等待。
 
-设备包同时包含 armv7 和 arm64，二进制最低系统为 iOS 9.0。当前实际运行验证使用 iOS 26.1 模拟器；iOS 9 等旧系统尚待真机测试，不能将最低系统字段视为所有版本均已验证。
+音频按书中顺序播放，即使网络先返回后面的段落也不会乱序。暂停时不会因预取完成而自动播放；停止、换章、换书或改音色/语速会取消旧会话。缓存按文本、音色、语速区分，已有音频直接复用，离线模式不会发起预取合成请求。
+
+## GitHub Actions
+
+在 **Actions → Build iOS 9 universal IPA → Run workflow** 运行。成功后下载 `ReaderPlus-iOS9-universal-IPA`，内含未签名 IPA、对应提交的精确源码、Mach-O 验证及 SHA256。IPA 需要根据设备支持的方式签名安装。
 
 ```sh
 bash scripts/prepare_compat_sdk.sh
@@ -14,33 +18,25 @@ python3 scripts/build_compat.py
 python3 scripts/build_compat.py --simulator
 bash scripts/compat_tests.sh
 bash scripts/compat_simulator.sh
-python3 scripts/verify_compat_ipa.py dist/ReaderPlus-1.1.0-iOS9-26.1-unsigned.ipa
+python3 scripts/verify_compat_ipa.py dist/ReaderPlus-1.2.0-iOS9-26.1-unsigned.ipa
 ```
 
-设备使用固定提交 Theos SDK 库 `0222fd5413cf4b9af096f37b4621afa2688572f7` 的 iOS 9.3 头文件、12.4 设备链接桩以及 Xcode 16.4 classic linker；源码不依赖 SwiftUI 或 Swift 运行库。模拟器使用当前 SDK 编译同一份 UIKit 源码。
+设备包为 armv7 + arm64，按 iOS 9.0 最低系统编译；使用固定 Theos SDK 提交 `0222fd5413cf4b9af096f37b4621afa2688572f7` 的 iOS 9.3 头文件、12.4 设备链接桩及 Xcode 16.4 classic linker。当前模拟器回归目标为 iOS 26.1，不能将最低系统声明视作所有旧版本真机已通过。
 
-回归包括文本/EPUB/GEC 测试、真实在线合成、系统语音实际完成播放，以及缓存 MP3 实际完成播放且不发起新的合成请求。诊断报告在 `ReaderPlus-iOS9-diagnostics`。
+回归包括乱序返回、预取数量上限、跨章、取消后迟到响应、延后报告预取错误、缓存与离线隔离；还实际运行系统朗读、缓存 MP3 播放，以及三段在线预取的暂停/恢复和衔接统计。诊断报告在 `ReaderPlus-iOS9-diagnostics`。
 
-## 使用
+## 离线使用与限制
 
-点击书架加号选择文件，也可从“文件”共享导入。设置中选择微软音色、语速，允许在线合成后即可播放。出门前点击“下载全书离线音频”，等待下载完成，再将朗读方式切为“仅播放离线音频”。缓存按文本、音色、语速保存，改变设置后需重新下载。
+联网选好晓晓/云希及语速，点击“下载全书离线音频”，保持阅读页开启并等待完成；断网后改为“仅播放离线音频”，保持相同音色和语速。iOS 系统语音也可断网朗读新文字，先在系统设置下载需要的音色。
 
-“系统语音（离线）”使用设备实际安装的音色，可以朗读未预下载的新文字。中文音色可先在系统语音设置中下载。
+微软离线能力是播放提前下载的音频。Windows 晓晓、云希模型缺少可用 iOS 合成运行库，未包含在 IPA 中，不能在断网时使用这些 Windows 模型合成新文字。
 
-**微软完全离线使用来自提前下载的音频。Windows 晓晓、云希模型没有可用的 iOS 合成运行库，未被包含在 IPA 中；不能在断网时使用这些 Windows 模型合成新内容。**
-
-PDF 在 iOS 9/10 支持原页查看，文字提取需要系统提供 PDFKit（iOS 11+）；扫描 PDF 无 OCR。EPUB 提取文字而不还原复杂排版。不支持 DRM、MOBI/AZW。
+PDF 在 iOS 9/10 支持原页阅读，文字提取需要系统提供 PDFKit（iOS 11+）；扫描件没有 OCR。不支持 DRM、MOBI/AZW。EPUB 提取文字而不还原复杂排版。微软在线接口的协议和可用性可能变化。
 
 ## 来源与许可
 
-原创 UIKit 代码为 MIT。阅读功能参考 SumatraPDF Plus，未复制其 Win32/C++/MuPDF 源码。在线协议参考 Brewus Edge-TTS（MIT）。SocketRocket 0.6.1 固定提交 `6fdc5fd0db5c49b1ed050d4033ee6a6ee2ec4d39`，保留 BSD 与 PATENTS；移除了旧 SDK 没有的网络服务枚举分支，使用默认网络服务类型。
+原创 UIKit 代码为 MIT，阅读功能参考 SumatraPDF Plus，未复制其 Win32/C++/MuPDF。在线协议参考 Brewus Edge-TTS（MIT）。SocketRocket 0.6.1 固定提交 `6fdc5fd0db5c49b1ed050d4033ee6a6ee2ec4d39`，保留 BSD 与 PATENTS；仅移除旧 SDK 没有的网络服务枚举分支。
 
-`CompatApp/RPGEC.c` 从 rany2/edge-tts（固定提交 `bd44c1d1aaebdc1db7f47456ee12431b42ec7cac`）移植，保留 LGPLv3。完整许可在 `ThirdParty/`。修改此模块后可按上述脚本重新构建完整应用，并自行签名安装；对应源码随每份成功构建的 IPA 一起提供。
+`CompatApp/RPGEC.c` 从 rany2/edge-tts 提交 `bd44c1d1aaebdc1db7f47456ee12431b42ec7cac` 移植，保留 LGPLv3；完整许可位于 `ThirdParty/`。修改后可以按上述脚本重建应用并自行签名安装，精确源码随成功构建的 IPA 提供。
 
-仓库仅发布用户明确授权的最小构建源码、示例和许可，不包含账号凭据、用户书籍或 Windows 语音包。微软在线接口的协议和可用性可能变化。
-
-## 当前构建结果
-
-[1.1.0 build 4 完整成功构建](https://github.com/gdsamsum/ReaderPlus-iOS-build/actions/runs/40212914396)，精确源码提交 `a5afb14fecd6ac3f24ce0cb2b182e04247dd4537`。iOS 26.1 模拟器的系统朗读和缓存 MP3 播放完成，缓存播放期间新增合成请求为 0。此断言针对应用合成请求计数；没有物理关闭主机网络。旧系统和真机仍需验证。
-
-IPA SHA256：`0cbcb81bacf90344764eb5c4b14331449ea2c87273fb61628c391b94980b8834`。对应精确源码快照随 Actions 主产物提供。
+这里只发布用户授权的最小构建源码、示例和许可，不包含账号凭据、用户书籍或 Windows 语音包。

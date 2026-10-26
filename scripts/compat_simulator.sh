@@ -16,7 +16,7 @@ xcrun simctl io "$device" screenshot build/compat-reader.png
 xcrun simctl terminate "$device" org.readerplus.ios
 xcrun simctl launch "$device" org.readerplus.ios --smoke-audio
 container=$(xcrun simctl get_app_container "$device" org.readerplus.ios data)
-for attempt in $(seq 1 120); do
+for attempt in $(seq 1 180); do
   if [ -f "$container/Documents/audio-regression.json" ]; then break; fi
   sleep 1
 done

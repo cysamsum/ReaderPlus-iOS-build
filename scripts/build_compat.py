@@ -57,7 +57,7 @@ if args.simulator:shutil.copy2(binaries[0],app/'ReaderPlus')
 else:run(['xcrun','lipo','-create']+binaries+['-output',app/'ReaderPlus'])
 info=plistlib.loads((ROOT/'App/Info.plist').read_bytes())
 info.update(CFBundleIdentifier='org.readerplus.ios',CFBundleExecutable='ReaderPlus',
-            CFBundleName='ReaderPlus',CFBundleShortVersionString='1.1.0',CFBundleVersion='4',
+            CFBundleName='ReaderPlus',CFBundleShortVersionString='1.2.0',CFBundleVersion='5',
             MinimumOSVersion='15.0' if args.simulator else '9.0',
             CFBundleSupportedPlatforms=['iPhoneSimulator' if args.simulator else 'iPhoneOS'],
             UIDeviceFamily=[1,2],UIRequiredDeviceCapabilities=['armv7'] if not args.simulator else [],
@@ -78,5 +78,5 @@ run(['xcrun','ibtool','--compile',app/'LaunchScreen.storyboardc',ROOT/'CompatApp
 if args.simulator:run(['codesign','--force','--sign','-',app])
 else:
     (ROOT/'dist').mkdir(exist_ok=True)
-    run(['ditto','-c','-k','--keepParent',app.parent,ROOT/'dist/ReaderPlus-1.1.0-iOS9-26.1-unsigned.ipa'])
+    run(['ditto','-c','-k','--keepParent',app.parent,ROOT/'dist/ReaderPlus-1.2.0-iOS9-26.1-unsigned.ipa'])
 print('Built',app)

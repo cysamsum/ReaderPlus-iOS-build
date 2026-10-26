@@ -1,8 +1,9 @@
 #import <Foundation/Foundation.h>
 #import <AVFoundation/AVFoundation.h>
+#import "RPAudioPipeline.h"
 NSString *RPXMLEscape(NSString *text);
 NSUInteger RPNetworkSynthesisCount(void);
-@interface ReaderPlusSpeechConnection:NSObject
+@interface ReaderPlusSpeechConnection:NSObject<ReaderPlusAudioRequest>
 -(void)synthesize:(NSString*)text voice:(NSString*)voice locale:(NSString*)locale rate:(NSInteger)rate completion:(void(^)(NSData*,NSError*))completion;
 -(void)cancel;
 @end
@@ -16,4 +17,5 @@ NSUInteger RPNetworkSynthesisCount(void);
 -(void)start:(NSDictionary*)document section:(NSInteger)section paragraph:(NSInteger)paragraph;
 -(void)pauseOrResume;
 -(void)stop;
+-(NSDictionary*)playbackStatistics;
 @end
