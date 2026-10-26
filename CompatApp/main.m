@@ -193,12 +193,12 @@ static NSArray *defaultVoices(void){return @[
 -(void)viewDidAppear:(BOOL)animated{
  [super viewDidAppear:animated];
  if(!self.importSmokeRan&&[[NSProcessInfo processInfo].arguments containsObject:@"--smoke-import"]){
-  self.importSmokeRan=YES;[self importTapped];
-  dispatch_after(dispatch_time(DISPATCH_TIME_NOW,NSEC_PER_SEC),dispatch_get_main_queue(),^{
-   UIViewController *presented=self.presentedViewController;BOOL expectedLocal=[NSProcessInfo processInfo].operatingSystemVersion.majorVersion<11||[[NSProcessInfo processInfo].arguments containsObject:@"--smoke-local-picker"];
+  self.importSmokeRan=YES;dispatch_async(dispatch_get_main_queue(),^{[self importTapped];});
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW,2*NSEC_PER_SEC),dispatch_get_main_queue(),^{
+   UIViewController *presented=self.view.window.rootViewController.presentedViewController;BOOL expectedLocal=[NSProcessInfo processInfo].operatingSystemVersion.majorVersion<11||[[NSProcessInfo processInfo].arguments containsObject:@"--smoke-local-picker"];
    BOOL local=[presented isKindOfClass:[UINavigationController class]]&&[[(UINavigationController*)presented topViewController]isKindOfClass:[ReaderPlusImportBrowser class]];
    BOOL system=[presented isKindOfClass:[UIDocumentPickerViewController class]];
-   NSDictionary *report=@{@"systemVersion":[UIDevice currentDevice].systemVersion,@"expectedLocal":@(expectedLocal),@"localPickerVisible":@(local),@"systemPickerVisible":@(system),@"passed":@(presented.view.window&&(expectedLocal?local:system))};
+   NSDictionary *report=@{@"systemVersion":[UIDevice currentDevice].systemVersion,@"presentedClass":presented?NSStringFromClass(presented.class):@"none",@"expectedLocal":@(expectedLocal),@"localPickerVisible":@(local),@"systemPickerVisible":@(system),@"passed":@(presented.view.window&&(expectedLocal?local:system))};
    NSString *documents=NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,NSUserDomainMask,YES)[0];writeJSON(report,[documents stringByAppendingPathComponent:@"import-regression.json"],nil);
   });
  }
@@ -213,11 +213,11 @@ static NSArray *defaultVoices(void){return @[
 -(void)presentLocalImport{
  NSURL *documents=[[NSFileManager defaultManager]URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask].firstObject;
  ReaderPlusImportBrowser *browser=[[ReaderPlusImportBrowser alloc]initWithRoot:documents directory:documents];__weak typeof(self) weak=self;
- browser.picked=^(NSURL *url){RPBooks *books=weak;[books dismissViewControllerAnimated:YES completion:^{[books importURL:url];}];};
- UINavigationController *nav=[[UINavigationController alloc]initWithRootViewController:browser];nav.modalPresentationStyle=UIModalPresentationFormSheet;[self presentViewController:nav animated:YES completion:nil];
+ browser.picked=^(NSURL *url){RPBooks *books=weak;[books.view.window.rootViewController dismissViewControllerAnimated:YES completion:^{[books importURL:url];}];};
+ UINavigationController *nav=[[UINavigationController alloc]initWithRootViewController:browser];nav.modalPresentationStyle=UIModalPresentationFormSheet;[self.view.window.rootViewController presentViewController:nav animated:YES completion:nil];
 }
 -(void)importTapped{
- if(self.importing||self.presentedViewController)return;
+ if(self.importing||self.view.window.rootViewController.presentedViewController)return;
  // Real iOS 9 asserts in the native picker's initializer without provisioned
  // iCloud container entitlements. The local browser works with USB sharing and
  // never depends on cloud signing capabilities or installed document providers.
@@ -225,7 +225,7 @@ static NSArray *defaultVoices(void){return @[
  UIDocumentPickerViewController *picker=nil;
  @try{picker=[[UIDocumentPickerViewController alloc]initWithDocumentTypes:@[@"public.data",@"public.content"]inMode:UIDocumentPickerModeImport];}
  @catch(NSException *exception){NSLog(@"System document picker unavailable: %@",exception.reason);[self presentLocalImport];return;}
- picker.delegate=self;picker.modalPresentationStyle=UIModalPresentationFormSheet;picker.popoverPresentationController.barButtonItem=self.navigationItem.rightBarButtonItem;[self presentViewController:picker animated:YES completion:nil];
+ picker.delegate=self;picker.modalPresentationStyle=UIModalPresentationFormSheet;picker.popoverPresentationController.barButtonItem=self.navigationItem.rightBarButtonItem;[self.view.window.rootViewController presentViewController:picker animated:YES completion:nil];
 }
 -(void)documentPicker:(UIDocumentPickerViewController*)p didPickDocumentAtURL:(NSURL*)url{[p dismissViewControllerAnimated:YES completion:^{[self importURL:url];}];}
 -(void)documentPicker:(UIDocumentPickerViewController*)p didPickDocumentsAtURLs:(NSArray*)urls{if(urls.count)[p dismissViewControllerAnimated:YES completion:^{[self importURL:urls[0]];}];}
