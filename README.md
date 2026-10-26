@@ -1,5 +1,15 @@
 # 拾页 Reader+ — iOS 9 兼容版
 
+## 当前版本：1.2.2（build 8）
+
+已通过 [构建及回归 40333999775](https://github.com/cysamsum/ReaderPlus-iOS-build/actions/runs/40333999775)，精确应用源码提交 `b13c105105c10692f8d2c32dc43b7603222ca1f3`。本版在朗读队列和整本下载中过滤纯标点、空白及控制字符组成的段落。包含中文或其他正文的行保持原文朗读；自动跳过连续、开头和末尾的标点行，无需重新导入已有书籍。
+
+核心回归通过，并在 iOS 26.1 实际播放带标点行的三段正文，确认只发出三次微软合成请求，播放位置保留原段落编号，连续完成且没有标点导致的错误。系统朗读、离线缓存、预缓冲、暂停恢复和导入界面回归也通过。本次未在此前的 iOS 9.3.5 iPad 安装新版，真机朗读仍需复测。
+
+未签名 IPA SHA256：`fefc03575d6d322f578106a3aa332d5f821d1c099b9220df131ec7618a471658`；精确云端源码包 SHA256：`ac568a42cd2de648cb1085e46d537434ec85284840968925a32ad5cd709b7271`。从本次构建的 `ReaderPlus-iOS9-universal-IPA` 下载。
+
+## 此前的 1.2.1 导入修复记录
+
 **1.2.1（build 7）已通过 [云端构建与回归 40324991581](https://github.com/cysamsum/ReaderPlus-iOS-build/actions/runs/40324991581)。** 精确应用源码提交为 `56358f684a9781fbb28afa1fa159caecff490b59`。iOS 26.1 原生及本机导入界面、系统朗读、离线播放和在线预缓冲回归全部通过。
 
 在 iPad mini 第一代 / iOS 9.3.5 上实际捕获旧版点击“＋”时的 iCloud entitlement 断言；现已使用本机导入列表修复。TXT/EPUB 均已实际入库，最终 build 7 覆盖安装后原书库文件哈希保持一致，用户再次确认 TXT 进入阅读页。此证据不代表全部系统或文件提供方均已验证。
@@ -30,7 +40,7 @@ python3 scripts/build_compat.py
 python3 scripts/build_compat.py --simulator
 bash scripts/compat_tests.sh
 bash scripts/compat_simulator.sh
-python3 scripts/verify_compat_ipa.py dist/ReaderPlus-1.2.1-iOS9-26.1-unsigned.ipa
+python3 scripts/verify_compat_ipa.py dist/ReaderPlus-1.2.2-iOS9-26.1-unsigned.ipa
 ```
 
 设备包为 armv7 + arm64，按 iOS 9.0 最低系统编译；使用固定 Theos SDK 提交 `0222fd5413cf4b9af096f37b4621afa2688572f7` 的 iOS 9.3 头文件、12.4 设备链接桩及 Xcode 16.4 classic linker。当前模拟器回归目标为 iOS 26.1，不能将最低系统声明视作所有旧版本真机已通过。
