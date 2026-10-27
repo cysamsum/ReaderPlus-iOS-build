@@ -1,6 +1,14 @@
 # 拾页 Reader+ — iOS 9 兼容版
 
-## 当前版本：1.2.2（build 8）
+## 当前版本：1.2.3（build 9）
+
+已通过 [构建及回归 40482873532](https://github.com/cysamsum/ReaderPlus-iOS-build/actions/runs/40482873532)，精确应用源码提交 `3941427ac56a825df3ebb937259c941722251b8f`。文件选择委托立即开始接收并协调复制文件，导入不再依赖关闭选择器的完成回调；界面恢复后打开书籍或显示错误，空 URL 返回也有明确提示。
+
+iOS 26.1 模拟器程序触发实际委托，验证选择器仍显示、已退出时 EPUB 均只新增一本并进入阅读页；空选择不新增书籍且错误可见。临时副本生命周期、原生/本机导入界面和原有语音回归均通过。这不是 LiveContainer 真机验证，原环境仍需复测；更新应保留原数据容器。
+
+未签名 IPA SHA256：`7d28e0d1da2230c00fdc7c5f7239e339261d96b2163b11fa666e117af1080d0a`；精确云端源码包 SHA256：`81885777ae59c9b4bd2cf01642077f27496ef87967fafcd59aab5b310977360d`。从上述构建的 `ReaderPlus-iOS9-universal-IPA` 下载，适用于 LiveContainer 导入更新。
+
+## 此前的 1.2.2 标点修复记录
 
 已通过 [构建及回归 40333999775](https://github.com/cysamsum/ReaderPlus-iOS-build/actions/runs/40333999775)，精确应用源码提交 `b13c105105c10692f8d2c32dc43b7603222ca1f3`。本版在朗读队列和整本下载中过滤纯标点、空白及控制字符组成的段落。包含中文或其他正文的行保持原文朗读；自动跳过连续、开头和末尾的标点行，无需重新导入已有书籍。
 
@@ -40,7 +48,7 @@ python3 scripts/build_compat.py
 python3 scripts/build_compat.py --simulator
 bash scripts/compat_tests.sh
 bash scripts/compat_simulator.sh
-python3 scripts/verify_compat_ipa.py dist/ReaderPlus-1.2.2-iOS9-26.1-unsigned.ipa
+python3 scripts/verify_compat_ipa.py dist/ReaderPlus-1.2.3-iOS9-26.1-unsigned.ipa
 ```
 
 设备包为 armv7 + arm64，按 iOS 9.0 最低系统编译；使用固定 Theos SDK 提交 `0222fd5413cf4b9af096f37b4621afa2688572f7` 的 iOS 9.3 头文件、12.4 设备链接桩及 Xcode 16.4 classic linker。当前模拟器回归目标为 iOS 26.1，不能将最低系统声明视作所有旧版本真机已通过。
