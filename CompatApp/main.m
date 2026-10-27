@@ -215,14 +215,15 @@ static NSArray *defaultVoices(void){return @[
  }
  if(!self.importSmokeRan&&[[NSProcessInfo processInfo].arguments containsObject:@"--smoke-import"]){
   self.importSmokeRan=YES;dispatch_async(dispatch_get_main_queue(),^{[self importTapped];});
-  dispatch_after(dispatch_time(DISPATCH_TIME_NOW,2*NSEC_PER_SEC),dispatch_get_main_queue(),^{
-   UIViewController *presented=self.navigationController.presentedViewController;BOOL expectedLocal=[NSProcessInfo processInfo].operatingSystemVersion.majorVersion<11||[[NSProcessInfo processInfo].arguments containsObject:@"--smoke-local-picker"];
-   BOOL local=[presented isKindOfClass:[UINavigationController class]]&&[[(UINavigationController*)presented topViewController]isKindOfClass:[ReaderPlusImportBrowser class]];
-   BOOL system=[presented isKindOfClass:[UIDocumentPickerViewController class]];
-   NSDictionary *report=@{@"systemVersion":[UIDevice currentDevice].systemVersion,@"presentedClass":presented?NSStringFromClass(presented.class):@"none",@"expectedLocal":@(expectedLocal),@"localPickerVisible":@(local),@"systemPickerVisible":@(system),@"passed":@(presented.view.window&&(expectedLocal?local:system))};
-   NSString *documents=NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,NSUserDomainMask,YES)[0];writeJSON(report,[documents stringByAppendingPathComponent:@"import-regression.json"],nil);
-  });
  }
+}
+-(void)recordImportPresentation:(UIViewController*)presented{
+ if(![[NSProcessInfo processInfo].arguments containsObject:@"--smoke-import"])return;
+ BOOL expectedLocal=[NSProcessInfo processInfo].operatingSystemVersion.majorVersion<11||[[NSProcessInfo processInfo].arguments containsObject:@"--smoke-local-picker"];
+ BOOL local=[presented isKindOfClass:[UINavigationController class]]&&[[(UINavigationController*)presented topViewController]isKindOfClass:[ReaderPlusImportBrowser class]];
+ BOOL system=[presented isKindOfClass:[UIDocumentPickerViewController class]];
+ NSDictionary *report=@{@"systemVersion":[UIDevice currentDevice].systemVersion,@"presentedClass":NSStringFromClass(presented.class),@"expectedLocal":@(expectedLocal),@"localPickerVisible":@(local),@"systemPickerVisible":@(system),@"passed":@(presented.view.window&&presented.presentingViewController&&(expectedLocal?local:system))};
+ NSString *documents=NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,NSUserDomainMask,YES)[0];writeJSON(report,[documents stringByAppendingPathComponent:@"import-regression.json"],nil);
 }
 -(void)sample{NSURL *url=[[NSBundle mainBundle]URLForResource:@"体验电子书" withExtension:@"epub"];if(url)[self importURL:url];}
 -(NSInteger)tableView:(UITableView*)t numberOfRowsInSection:(NSInteger)s{return self.library.books.count;}
@@ -235,7 +236,7 @@ static NSArray *defaultVoices(void){return @[
  NSURL *documents=[[NSFileManager defaultManager]URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask].firstObject;
  ReaderPlusImportBrowser *browser=[[ReaderPlusImportBrowser alloc]initWithRoot:documents directory:documents];__weak typeof(self) weak=self;
  browser.picked=^(NSURL *url){RPBooks *books=weak;[books.navigationController dismissViewControllerAnimated:YES completion:^{[books importURL:url];}];};
- UINavigationController *nav=[[UINavigationController alloc]initWithRootViewController:browser];nav.modalPresentationStyle=UIModalPresentationFormSheet;[self.navigationController presentViewController:nav animated:YES completion:nil];
+ UINavigationController *nav=[[UINavigationController alloc]initWithRootViewController:browser];nav.modalPresentationStyle=UIModalPresentationFormSheet;[self.navigationController presentViewController:nav animated:YES completion:^{[self recordImportPresentation:nav];}];
 }
 -(void)importTapped{
  if(self.importing||self.navigationController.presentedViewController)return;
@@ -246,7 +247,7 @@ static NSArray *defaultVoices(void){return @[
  UIDocumentPickerViewController *picker=nil;
  @try{picker=[[UIDocumentPickerViewController alloc]initWithDocumentTypes:@[@"public.data",@"public.content"]inMode:UIDocumentPickerModeImport];}
  @catch(NSException *exception){NSLog(@"System document picker unavailable: %@",exception.reason);[self presentLocalImport];return;}
- picker.delegate=self;picker.modalPresentationStyle=UIModalPresentationFormSheet;picker.popoverPresentationController.barButtonItem=self.navigationItem.rightBarButtonItem;[self.navigationController presentViewController:picker animated:YES completion:nil];
+ picker.delegate=self;picker.modalPresentationStyle=UIModalPresentationFormSheet;picker.popoverPresentationController.barButtonItem=self.navigationItem.rightBarButtonItem;[self.navigationController presentViewController:picker animated:YES completion:^{[self recordImportPresentation:picker];}];
 }
 -(void)acceptPicker:(UIDocumentPickerViewController*)picker URL:(NSURL*)url{
  if(self.handledPicker==picker||self.importing)return;self.handledPicker=picker;
