@@ -207,6 +207,7 @@ static NSArray *defaultVoices(void){return @[
   UIDocumentPickerViewController *picker=[[UIDocumentPickerViewController alloc]initWithDocumentTypes:@[@"public.data",@"public.content"]inMode:UIDocumentPickerModeImport];
   void(^selected)(void)=^{
    // Exercise both delegate entry points for one selection; only one book may be added.
+   if([[NSProcessInfo processInfo].arguments containsObject:@"--smoke-picker-empty"]){[self documentPicker:picker didPickDocumentsAtURLs:@[]];return;}
    if([[NSProcessInfo processInfo].arguments containsObject:@"--smoke-picker-detached"]){[self documentPicker:picker didPickDocumentsAtURLs:@[returned]];[self documentPicker:picker didPickDocumentAtURL:returned];}
    else{[self documentPicker:picker didPickDocumentAtURL:returned];[self documentPicker:picker didPickDocumentsAtURLs:@[returned]];}
   };
@@ -255,7 +256,7 @@ static NSArray *defaultVoices(void){return @[
  if(picker.presentingViewController&&!picker.isBeingDismissed)[picker dismissViewControllerAnimated:YES completion:nil];
 }
 -(void)documentPicker:(UIDocumentPickerViewController*)p didPickDocumentAtURL:(NSURL*)url{[self acceptPicker:p URL:url];}
--(void)documentPicker:(UIDocumentPickerViewController*)p didPickDocumentsAtURLs:(NSArray*)urls{if(urls.count)[self acceptPicker:p URL:urls[0]];}
+-(void)documentPicker:(UIDocumentPickerViewController*)p didPickDocumentsAtURLs:(NSArray*)urls{[self acceptPicker:p URL:urls.firstObject];}
 -(void)finishPendingImport{
  if(!self.pendingImportResult)return;
  UINavigationController *nav=self.navigationController;
@@ -269,8 +270,10 @@ static NSArray *defaultVoices(void){return @[
  if([[NSProcessInfo processInfo].arguments containsObject:@"--smoke-picker-import"]){
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW,NSEC_PER_SEC),dispatch_get_main_queue(),^{
    BOOL reader=[nav.topViewController isKindOfClass:[RPReader class]]&&nav.topViewController.view.window;
+   BOOL empty=[[NSProcessInfo processInfo].arguments containsObject:@"--smoke-picker-empty"];
+   BOOL errorVisible=error&&[nav.presentedViewController isKindOfClass:[UIAlertController class]]&&nav.presentedViewController.view.window;
    NSDictionary *document=book?jsonFile([root()stringByAppendingPathComponent:[book[@"id"]stringByAppendingPathExtension:@"json"]]):nil;
-   NSDictionary *report=@{@"systemVersion":[UIDevice currentDevice].systemVersion,@"detachedPicker":@([[NSProcessInfo processInfo].arguments containsObject:@"--smoke-picker-detached"]),@"booksBefore":@(self.importSmokeBefore),@"booksAfter":@(self.library.books.count),@"readerVisible":@(reader),@"format":book[@"format"]?:@"",@"sections":@([document[@"sections"]count]),@"error":error.localizedDescription?:@"",@"passed":@(!error&&reader&&self.library.books.count==self.importSmokeBefore+1&&[document[@"sections"]count]>0)};
+   NSDictionary *report=@{@"systemVersion":[UIDevice currentDevice].systemVersion,@"detachedPicker":@([[NSProcessInfo processInfo].arguments containsObject:@"--smoke-picker-detached"]),@"emptySelection":@(empty),@"errorVisible":@(errorVisible),@"booksBefore":@(self.importSmokeBefore),@"booksAfter":@(self.library.books.count),@"readerVisible":@(reader),@"format":book[@"format"]?:@"",@"sections":@([document[@"sections"]count]),@"error":error.localizedDescription?:@"",@"passed":@(empty?(errorVisible&&self.library.books.count==self.importSmokeBefore&&!self.importing):(!error&&reader&&self.library.books.count==self.importSmokeBefore+1&&[document[@"sections"]count]>0))};
    writeJSON(report,[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,NSUserDomainMask,YES)[0]stringByAppendingPathComponent:@"picker-import-regression.json"],nil);
   });
  }

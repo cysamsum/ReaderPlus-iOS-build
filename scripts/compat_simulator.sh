@@ -47,6 +47,16 @@ cp "$container/Documents/picker-import-regression.json" build/compat-picker-deta
 python3 -c 'import json; d=json.load(open("build/compat-picker-detached.json")); print(d); assert d["passed"] and d["detachedPicker"] and d["format"]=="epub",d'
 xcrun simctl io "$device" screenshot build/compat-picker-detached.png
 xcrun simctl terminate "$device" org.readerplus.ios
+rm "$container/Documents/picker-import-regression.json"
+xcrun simctl launch "$device" org.readerplus.ios --smoke-picker-import --smoke-picker-empty
+for attempt in $(seq 1 30); do
+  if [ -f "$container/Documents/picker-import-regression.json" ]; then break; fi
+  sleep 1
+done
+cp "$container/Documents/picker-import-regression.json" build/compat-picker-empty.json
+python3 -c 'import json; d=json.load(open("build/compat-picker-empty.json")); print(d); assert d["passed"] and d["emptySelection"] and d["errorVisible"],d'
+xcrun simctl io "$device" screenshot build/compat-picker-empty.png
+xcrun simctl terminate "$device" org.readerplus.ios
 xcrun simctl launch "$device" org.readerplus.ios --smoke-audio
 container=$(xcrun simctl get_app_container "$device" org.readerplus.ios data)
 for attempt in $(seq 1 180); do
