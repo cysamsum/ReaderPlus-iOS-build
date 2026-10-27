@@ -5,6 +5,7 @@
 #import "RPAudioCache.h"
 #import "RPAudioAudit.h"
 #import "RPImportBrowser.h"
+#import "RPImportFile.h"
 
 static UIColor *green(void){return [UIColor colorWithRed:.12 green:.42 blue:.36 alpha:1];}
 static void alert(UIViewController *vc,NSString *title,NSString *message){UIAlertController *a=[UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];[a addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleDefault handler:nil]];[vc presentViewController:a animated:YES completion:nil];}
@@ -25,12 +26,12 @@ static BOOL writeJSON(id value,NSString *path,NSError **error){NSData *data=[NSJ
 -(BOOL)remove:(NSDictionary*)book error:(NSError**)error{if(self.loadError)return NO;NSMutableArray *next=[self.books mutableCopy];NSIndexSet *items=[next indexesOfObjectsPassingTest:^BOOL(id b,NSUInteger i,BOOL *s){return [b[@"id"]isEqual:book[@"id"]];}];[next removeObjectsAtIndexes:items];if(!writeJSON(next,[root()stringByAppendingPathComponent:@"library.json"],error))return NO;self.books=next;for(NSString *ext in @[book[@"format"],@"json"])[[NSFileManager defaultManager]removeItemAtPath:[root()stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.%@",book[@"id"],ext]]error:nil];return YES;}
 -(void)importURL:(NSURL*)url completion:(void(^)(NSDictionary*,NSError*))completion{
  if(self.loadError){completion(nil,[NSError errorWithDomain:@"ReaderPlus" code:1 userInfo:@{NSLocalizedDescriptionKey:self.loadError}]);return;}
+ if(!url.isFileURL){completion(nil,[NSError errorWithDomain:@"ReaderPlusImport" code:2 userInfo:@{NSLocalizedDescriptionKey:@"未收到有效的本地文件，请重新选择或从文件管理器分享导入。"}]);return;}
  BOOL access=[url startAccessingSecurityScopedResource];NSString *idString=[NSUUID UUID].UUIDString,*ext=url.pathExtension.lowercaseString;
  NSString *source=[root()stringByAppendingPathComponent:[idString stringByAppendingPathExtension:ext]],*content=[root()stringByAppendingPathComponent:[idString stringByAppendingPathExtension:@"json"]];
  dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT,0),^{
-  NSError *error=nil;NSDictionary *attrs=[[NSFileManager defaultManager]attributesOfItemAtPath:url.path error:&error];NSDictionary *document=nil;
-  if(!error&&[attrs fileSize]>50*1024*1024)error=[NSError errorWithDomain:@"ReaderPlus" code:1 userInfo:@{NSLocalizedDescriptionKey:@"文件超过 50 MB。"}];
-  if(!error&&[[NSFileManager defaultManager]copyItemAtURL:url toURL:[NSURL fileURLWithPath:source] error:&error])document=RPImportDocument([NSURL fileURLWithPath:source],url.lastPathComponent.stringByDeletingPathExtension,&error);
+  NSError *error=nil;NSDictionary *document=nil;
+  if(RPCopyImportFile(url,[NSURL fileURLWithPath:source],&error))document=RPImportDocument([NSURL fileURLWithPath:source],url.lastPathComponent.stringByDeletingPathExtension,&error);
   if(document&&[ext isEqual:@"pdf"]){CGPDFDocumentRef pdf=CGPDFDocumentCreateWithURL((__bridge CFURLRef)[NSURL fileURLWithPath:source]);NSUInteger pages=pdf?CGPDFDocumentGetNumberOfPages(pdf):0;
    if(!pages||pages>2000||(CGPDFDocumentIsEncrypted(pdf)&&!CGPDFDocumentIsUnlocked(pdf))){error=[NSError errorWithDomain:@"ReaderPlus" code:1 userInfo:@{NSLocalizedDescriptionKey:@"PDF 无法打开、需要密码或超过 2000 页。"}];document=nil;}
    else if(![document[@"sections"]count]){NSMutableArray *sections=[NSMutableArray array];for(NSUInteger i=0;i<pages;i++)[sections addObject:@{@"id":@(i),@"title":[NSString stringWithFormat:@"第 %lu 页",(unsigned long)i+1],@"paragraphs":@[]}];document=@{@"title":document[@"title"],@"sections":sections};}
@@ -75,7 +76,7 @@ static NSArray *defaultVoices(void){return @[
  if(p.section==1){c.textLabel.text=@[@"朗读方式",@"语言与音色",@"语速",@"更新微软音色列表"][p.row];c.detailTextLabel.text=p.row==0?RPCurrentMode():p.row==1?([d stringForKey:@"speech.voice"]?:@"晓晓"):p.row==2?[NSString stringWithFormat:@"%+ld%%",(long)[d integerForKey:@"speech.rate"]]:@"";}
  if(p.section==1&&p.row==1&&[RPCurrentMode()isEqual:@"系统语音（离线）"]){NSString *identifier=[d stringForKey:@"compat.systemVoice"];AVSpeechSynthesisVoice *voice=identifier.length?[AVSpeechSynthesisVoice voiceWithIdentifier:identifier]:nil;c.detailTextLabel.text=voice?[NSString stringWithFormat:@"%@ · %@",voice.name,voice.language]:@"按语言自动选择";}
  if(p.section==2){c.textLabel.text=@"允许发送朗读段落";UISwitch *s=[UISwitch new];s.on=[d boolForKey:@"speech.consent"];[s addTarget:self action:@selector(consent:) forControlEvents:UIControlEventValueChanged];c.accessoryView=s;}
- if(p.section==3){c.textLabel.text=@[@"拾页 Reader+ 1.2.2",@"目标系统 iOS 9–26.1",@"开源许可"][p.row];if(p.row<2)c.accessoryType=UITableViewCellAccessoryNone;}
+ if(p.section==3){c.textLabel.text=@[@"拾页 Reader+ 1.2.3",@"目标系统 iOS 9–26.1",@"开源许可"][p.row];if(p.row<2)c.accessoryType=UITableViewCellAccessoryNone;}
  return c;
 }
 -(void)consent:(UISwitch*)s{[[NSUserDefaults standardUserDefaults]setBool:s.on forKey:@"speech.consent"];if(self.changed)self.changed();}
@@ -180,6 +181,11 @@ static NSArray *defaultVoices(void){return @[
 @property(nonatomic,strong)RPLibrary *library;
 @property(nonatomic)BOOL importing;
 @property(nonatomic)BOOL importSmokeRan;
+@property(nonatomic)BOOL pendingImportResult,importPresentationScheduled;
+@property(nonatomic,strong)NSDictionary *pendingImportedBook;
+@property(nonatomic,strong)NSError *pendingImportError;
+@property(nonatomic,weak)UIDocumentPickerViewController *handledPicker;
+@property(nonatomic)NSUInteger importSmokeBefore;
 -(void)importURL:(NSURL*)url;
 @end
 @implementation RPBooks
@@ -192,6 +198,20 @@ static NSArray *defaultVoices(void){return @[
 -(void)viewWillAppear:(BOOL)a{[super viewWillAppear:a];[self.tableView reloadData];}
 -(void)viewDidAppear:(BOOL)animated{
  [super viewDidAppear:animated];
+ [self finishPendingImport];
+ if(!self.importSmokeRan&&[[NSProcessInfo processInfo].arguments containsObject:@"--smoke-picker-import"]){
+  self.importSmokeRan=YES;self.importSmokeBefore=self.library.books.count;
+  NSURL *sample=[[NSBundle mainBundle]URLForResource:@"体验电子书" withExtension:@"epub"];
+  NSURL *returned=[NSURL fileURLWithPath:[NSTemporaryDirectory()stringByAppendingPathComponent:[[NSUUID UUID].UUIDString stringByAppendingPathExtension:@"epub"]]];
+  NSError *error=nil;if(![[NSFileManager defaultManager]copyItemAtURL:sample toURL:returned error:&error]){NSLog(@"Picker regression fixture failed: %@",error);return;}
+  UIDocumentPickerViewController *picker=[[UIDocumentPickerViewController alloc]initWithDocumentTypes:@[@"public.data",@"public.content"]inMode:UIDocumentPickerModeImport];
+  void(^selected)(void)=^{
+   // Exercise both delegate entry points for one selection; only one book may be added.
+   if([[NSProcessInfo processInfo].arguments containsObject:@"--smoke-picker-detached"]){[self documentPicker:picker didPickDocumentsAtURLs:@[returned]];[self documentPicker:picker didPickDocumentAtURL:returned];}
+   else{[self documentPicker:picker didPickDocumentAtURL:returned];[self documentPicker:picker didPickDocumentsAtURLs:@[returned]];}
+  };
+  dispatch_async(dispatch_get_main_queue(),^{if([[NSProcessInfo processInfo].arguments containsObject:@"--smoke-picker-detached"])selected();else [self.navigationController presentViewController:picker animated:NO completion:selected];});
+ }
  if(!self.importSmokeRan&&[[NSProcessInfo processInfo].arguments containsObject:@"--smoke-import"]){
   self.importSmokeRan=YES;dispatch_async(dispatch_get_main_queue(),^{[self importTapped];});
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW,2*NSEC_PER_SEC),dispatch_get_main_queue(),^{
@@ -227,9 +247,38 @@ static NSArray *defaultVoices(void){return @[
  @catch(NSException *exception){NSLog(@"System document picker unavailable: %@",exception.reason);[self presentLocalImport];return;}
  picker.delegate=self;picker.modalPresentationStyle=UIModalPresentationFormSheet;picker.popoverPresentationController.barButtonItem=self.navigationItem.rightBarButtonItem;[self.navigationController presentViewController:picker animated:YES completion:nil];
 }
--(void)documentPicker:(UIDocumentPickerViewController*)p didPickDocumentAtURL:(NSURL*)url{[p dismissViewControllerAnimated:YES completion:^{[self importURL:url];}];}
--(void)documentPicker:(UIDocumentPickerViewController*)p didPickDocumentsAtURLs:(NSArray*)urls{if(urls.count)[p dismissViewControllerAnimated:YES completion:^{[self importURL:urls[0]];}];}
--(void)importURL:(NSURL*)url{if(self.importing)return;self.importing=YES;self.navigationItem.rightBarButtonItem.enabled=NO;self.title=@"正在导入…";[self.library importURL:url completion:^(NSDictionary *book,NSError *error){self.importing=NO;self.navigationItem.rightBarButtonItem.enabled=YES;self.title=@"拾页 Reader+";[self.tableView reloadData];if(error)alert(self,@"导入失败",error.localizedDescription);else [self open:book];}];}
+-(void)acceptPicker:(UIDocumentPickerViewController*)picker URL:(NSURL*)url{
+ if(self.handledPicker==picker||self.importing)return;self.handledPicker=picker;
+ // The host may already have dismissed this picker. Never make file access
+ // depend on a second dismissal's completion callback.
+ [self importURL:url];
+ if(picker.presentingViewController&&!picker.isBeingDismissed)[picker dismissViewControllerAnimated:YES completion:nil];
+}
+-(void)documentPicker:(UIDocumentPickerViewController*)p didPickDocumentAtURL:(NSURL*)url{[self acceptPicker:p URL:url];}
+-(void)documentPicker:(UIDocumentPickerViewController*)p didPickDocumentsAtURLs:(NSArray*)urls{if(urls.count)[self acceptPicker:p URL:urls[0]];}
+-(void)finishPendingImport{
+ if(!self.pendingImportResult)return;
+ UINavigationController *nav=self.navigationController;
+ if(nav.presentedViewController||nav.transitionCoordinator||!self.view.window){
+  if(!self.importPresentationScheduled){self.importPresentationScheduled=YES;dispatch_after(dispatch_time(DISPATCH_TIME_NOW,NSEC_PER_SEC/10),dispatch_get_main_queue(),^{self.importPresentationScheduled=NO;[self finishPendingImport];});}return;
+ }
+ NSDictionary *book=self.pendingImportedBook;NSError *error=self.pendingImportError;
+ self.pendingImportResult=NO;self.pendingImportedBook=nil;self.pendingImportError=nil;self.importing=NO;
+ self.navigationItem.rightBarButtonItem.enabled=YES;self.title=@"拾页 Reader+";[self.tableView reloadData];
+ if(error)alert(self,@"导入失败",error.localizedDescription);else [self open:book];
+ if([[NSProcessInfo processInfo].arguments containsObject:@"--smoke-picker-import"]){
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW,NSEC_PER_SEC),dispatch_get_main_queue(),^{
+   BOOL reader=[nav.topViewController isKindOfClass:[RPReader class]]&&nav.topViewController.view.window;
+   NSDictionary *document=book?jsonFile([root()stringByAppendingPathComponent:[book[@"id"]stringByAppendingPathExtension:@"json"]]):nil;
+   NSDictionary *report=@{@"systemVersion":[UIDevice currentDevice].systemVersion,@"detachedPicker":@([[NSProcessInfo processInfo].arguments containsObject:@"--smoke-picker-detached"]),@"booksBefore":@(self.importSmokeBefore),@"booksAfter":@(self.library.books.count),@"readerVisible":@(reader),@"format":book[@"format"]?:@"",@"sections":@([document[@"sections"]count]),@"error":error.localizedDescription?:@"",@"passed":@(!error&&reader&&self.library.books.count==self.importSmokeBefore+1&&[document[@"sections"]count]>0)};
+   writeJSON(report,[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,NSUserDomainMask,YES)[0]stringByAppendingPathComponent:@"picker-import-regression.json"],nil);
+  });
+ }
+}
+-(void)importURL:(NSURL*)url{
+ if(self.importing)return;self.importing=YES;self.navigationItem.rightBarButtonItem.enabled=NO;self.title=@"正在导入…";
+ [self.library importURL:url completion:^(NSDictionary *book,NSError *error){self.pendingImportedBook=book;self.pendingImportError=error;self.pendingImportResult=YES;[self finishPendingImport];}];
+}
 @end
 @interface RPAppDelegate:UIResponder<UIApplicationDelegate>
 @property(nonatomic,strong)UIWindow *window;
@@ -239,5 +288,6 @@ static NSArray *defaultVoices(void){return @[
 @implementation RPAppDelegate
 -(BOOL)application:(UIApplication*)app didFinishLaunchingWithOptions:(NSDictionary*)options{self.window=[[UIWindow alloc]initWithFrame:[UIScreen mainScreen].bounds];self.window.tintColor=green();self.books=[[RPBooks alloc]initWithStyle:UITableViewStylePlain];self.window.rootViewController=[[UINavigationController alloc]initWithRootViewController:self.books];[self.window makeKeyAndVisible];if([[NSProcessInfo processInfo].arguments containsObject:@"--smoke-audio"]){self.audioAudit=[RPAudioAudit new];dispatch_after(dispatch_time(DISPATCH_TIME_NOW,NSEC_PER_SEC),dispatch_get_main_queue(),^{[self.audioAudit run];});}return YES;}
 -(BOOL)application:(UIApplication*)app openURL:(NSURL*)url options:(NSDictionary*)options{UINavigationController *nav=(id)self.window.rootViewController;[nav popToRootViewControllerAnimated:NO];[self.books importURL:url];return YES;}
+-(void)applicationDidBecomeActive:(UIApplication*)application{[self.books finishPendingImport];}
 @end
 int main(int argc,char **argv){@autoreleasepool{return UIApplicationMain(argc,argv,nil,NSStringFromClass([RPAppDelegate class]));}}
